@@ -1,0 +1,34 @@
+{
+  "name": "@larabug/core",
+  "version": "1.0.0",
+  "description": "Core functionality for LaraBug JavaScript SDKs",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "build:watch": "rollup -c -w",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LaraBug/larabug-javascript",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "larabug",
+    "error-tracking",
+    "core"
+  ],
+  "author": "LaraBug",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^11.1.6",
+    "rollup": "^4.9.6",
+    "rollup-plugin-dts": "^6.1.0",
+    "typescript": "^5.3.3"
+  }
+}

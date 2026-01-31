@@ -1,0 +1,44 @@
+{
+  "name": "@larabug/react",
+  "version": "1.0.0",
+  "description": "LaraBug SDK for React with Error Boundary component",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "build:watch": "rollup -c -w",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LaraBug/larabug-javascript",
+    "directory": "packages/react"
+  },
+  "keywords": [
+    "larabug",
+    "error-tracking",
+    "react",
+    "error-boundary"
+  ],
+  "author": "LaraBug",
+  "license": "MIT",
+  "peerDependencies": {
+    "react": ">=16.8.0"
+  },
+  "dependencies": {
+    "@larabug/browser": "^1.0.0",
+    "@larabug/core": "^1.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/react": "^18.2.48",
+    "react": "^18.2.0",
+    "rollup": "^4.9.6",
+    "rollup-plugin-dts": "^6.1.0",
+    "typescript": "^5.3.3"
+  }
+}

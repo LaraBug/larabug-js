@@ -1,0 +1,43 @@
+{
+  "name": "@larabug/vue",
+  "version": "1.0.0",
+  "description": "LaraBug SDK for Vue 3 with error handler plugin",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "build:watch": "rollup -c -w",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LaraBug/larabug-javascript",
+    "directory": "packages/vue"
+  },
+  "keywords": [
+    "larabug",
+    "error-tracking",
+    "vue",
+    "vue3"
+  ],
+  "author": "LaraBug",
+  "license": "MIT",
+  "peerDependencies": {
+    "vue": ">=3.0.0"
+  },
+  "dependencies": {
+    "@larabug/browser": "^1.0.0",
+    "@larabug/core": "^1.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^11.1.6",
+    "rollup": "^4.9.6",
+    "rollup-plugin-dts": "^6.1.0",
+    "typescript": "^5.3.3",
+    "vue": "^3.4.15"
+  }
+}

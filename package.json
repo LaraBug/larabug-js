@@ -1,0 +1,51 @@
+{
+  "name": "@larabug/javascript",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Official LaraBug JavaScript SDK monorepo for browser error tracking",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LaraBug/larabug-javascript"
+  },
+  "keywords": [
+    "larabug",
+    "error-tracking",
+    "bug-tracking",
+    "javascript",
+    "react",
+    "vue",
+    "inertia"
+  ],
+  "author": "LaraBug",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "lerna run build",
+    "build:watch": "lerna run build:watch --parallel",
+    "test": "jest",
+    "lint": "eslint packages --ext .ts,.tsx",
+    "lint:fix": "eslint packages --ext .ts,.tsx --fix",
+    "clean": "lerna run clean && rm -rf node_modules",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.11.5",
+    "@typescript-eslint/eslint-plugin": "^6.19.1",
+    "@typescript-eslint/parser": "^6.19.1",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "lerna": "^8.0.2",
+    "prettier": "^3.2.4",
+    "rollup": "^4.9.6",
+    "rollup-plugin-dts": "^6.1.0",
+    "ts-jest": "^29.1.2",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3"
+  }
+}
