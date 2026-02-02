@@ -42,6 +42,9 @@ export const LaraBugVuePlugin: Plugin = {
     // Initialize LaraBug client
     const client = init(larabugOptions);
 
+    // Tag errors as Vue
+    client.setTag('framework', 'vue');
+
     // Store client on app
     app.config.globalProperties.$larabug = client;
 
