@@ -18,7 +18,7 @@ const config = [
         sourcemap: true,
       },
     ],
-    external: ['react', 'react-dom'],
+    external: ['react', 'react-dom', '@larabug/browser', '@larabug/core'],
     plugins: [
       resolve(),
       commonjs(),
@@ -34,7 +34,7 @@ const config = [
       file: 'dist/index.d.ts',
       format: 'es',
     },
-    external: ['react', 'react-dom'],
+    external: ['react', 'react-dom', '@larabug/browser', '@larabug/core'],
     plugins: [dts()],
   },
 ];

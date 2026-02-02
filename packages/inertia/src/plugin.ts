@@ -53,11 +53,11 @@ export function createInertiaLaraBugPlugin(options: InertiaLaraBugOptions = {}) 
       const client = getCurrentClient();
 
       if (!client) {
-        console.warn('[LaraBug] Client not initialized. Call init() before using Inertia plugin.');
+        console.error('[LaraBug] Client not initialized. Call LaraBug.init() before using the Inertia plugin.');
         return;
       }
-
-      // Tag errors as Inertia
+      
+      // Ensure framework tag is set
       client.setTag('framework', 'inertia');
 
       // Track page visits

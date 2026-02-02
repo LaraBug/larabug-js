@@ -18,7 +18,7 @@ const config = [
         sourcemap: true,
       },
     ],
-    external: ['@inertiajs/core'],
+    external: ['@inertiajs/core', '@larabug/browser', '@larabug/core'],
     plugins: [
       resolve(),
       commonjs(),
@@ -34,7 +34,7 @@ const config = [
       file: 'dist/index.d.ts',
       format: 'es',
     },
-    external: ['@inertiajs/core'],
+    external: ['@inertiajs/core', '@larabug/browser', '@larabug/core'],
     plugins: [dts()],
   },
 ];
