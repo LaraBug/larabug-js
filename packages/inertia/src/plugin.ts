@@ -57,6 +57,9 @@ export function createInertiaLaraBugPlugin(options: InertiaLaraBugOptions = {}) 
         return;
       }
 
+      // Tag errors as Inertia
+      client.setTag('framework', 'inertia');
+
       // Track page visits
       if (trackPageVisits) {
         router.on('navigate', (event) => {
