@@ -270,6 +270,8 @@ export class BrowserClient extends BaseLaraBugClient {
 }
 
 // Extend XMLHttpRequest type
+export {}; // Make this a module
+
 declare global {
   interface XMLHttpRequest {
     __larabug?: {

@@ -22,9 +22,29 @@ export class BaseLaraBugClient implements LaraBugClient {
   }
 
   private normalizeOptions(options: LaraBugOptions): Required<LaraBugOptions> {
+    let login_key = options.login_key || '';
+    let project_key = options.project_key || '';
+    let endpoint = options.endpoint || 'https://www.larabug.com/api/log';
+
+    // Parse DSN if provided (takes precedence)
+    if (options.dsn) {
+      const parsed = this.parseDsn(options.dsn);
+      if (parsed) {
+        login_key = parsed.login_key;
+        project_key = parsed.project_key;
+        endpoint = parsed.endpoint;
+      }
+    }
+
+    if (!login_key || !project_key) {
+      throw new Error('LaraBug: login_key and project_key are required. Use dsn or provide both keys.');
+    }
+
     return {
-      key: options.key,
-      endpoint: options.endpoint || 'https://api.larabug.com',
+      login_key,
+      project_key,
+      endpoint,
+      dsn: options.dsn || '',
       release: options.release || '',
       environment: options.environment || 'production',
       enabled: options.enabled !== false,
@@ -38,7 +58,32 @@ export class BaseLaraBugClient implements LaraBugClient {
         retries: options.transport?.retries || 3,
         headers: options.transport?.headers || {},
       },
+      verifySSL: options.verifySSL !== false,
     };
+  }
+
+  /**
+   * Parse DSN string (format: https://login_key:project_key@host/path)
+   */
+  private parseDsn(dsn: string): { login_key: string; project_key: string; endpoint: string } | null {
+    try {
+      const url = new URL(dsn);
+      const login_key = url.username;
+      const project_key = url.password;
+
+      if (!login_key || !project_key) {
+        throw new Error('DSN must contain both login_key and project_key');
+      }
+
+      return {
+        login_key,
+        project_key,
+        endpoint: `${url.protocol}//${url.host}${url.pathname}`,
+      };
+    } catch (error) {
+      console.error('LaraBug: Invalid DSN format. Expected: https://login_key:project_key@host/path', error);
+      return null;
+    }
   }
 
   /**
@@ -148,9 +193,25 @@ export class BaseLaraBugClient implements LaraBugClient {
       user: this.user || undefined,
       context: { ...this.context, ...this.options.context, ...context },
       breadcrumbs: [...this.breadcrumbs],
+      request: this.captureRequestInfo(),
       extra: {
         tags: this.tags,
       },
+    };
+  }
+
+  /**
+   * Capture current request information
+   */
+  private captureRequestInfo(): RequestInfo | undefined {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    return {
+      url: window.location.href,
+      method: 'GET', // Browser context is always GET for page loads
+      query_string: window.location.search,
     };
   }
 
@@ -230,13 +291,19 @@ export class BaseLaraBugClient implements LaraBugClient {
       return;
     }
 
-    const url = `${this.options.endpoint}/errors`;
-    const payload = JSON.stringify(processedEvent);
+    const url = `${this.options.endpoint}`;
+    
+    // Wrap event with project key and type (matching PHP SDK format)
+    const payload = JSON.stringify({
+      type: 'javascript_error',
+      project: this.options.project_key,
+      ...processedEvent,
+    });
 
     // Use sendBeacon if available for better reliability
     if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-      const blob = new Blob([payload], { type: 'application/json' });
-      navigator.sendBeacon(url, blob);
+      // Note: sendBeacon doesn't support custom headers, so we use fetch instead
+      this.sendViaFetch(url, payload);
     } else {
       // Fallback to fetch
       this.sendViaFetch(url, payload);
@@ -244,7 +311,7 @@ export class BaseLaraBugClient implements LaraBugClient {
   }
 
   /**
-   * Send via fetch API
+   * Send via fetch API (matching PHP SDK authentication)
    */
   private async sendViaFetch(url: string, payload: string): Promise<void> {
     try {
@@ -252,7 +319,8 @@ export class BaseLaraBugClient implements LaraBugClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-LaraBug-Key': this.options.key,
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${this.options.login_key}`,
           ...this.options.transport.headers,
         },
         body: payload,
