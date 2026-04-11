@@ -1,6 +1,4 @@
-<p align="center">
-    <a href="https://www.larabug.com" target="_blank"><img width="150" src=".github/assets/logo.png" alt="LaraBug"></a>
-</p>
+<a href="https://www.larabug.com" target="_blank"><img width="150" src=".github/assets/logo.png" alt="LaraBug"></a>
 
 # LaraBug JavaScript SDK
 
