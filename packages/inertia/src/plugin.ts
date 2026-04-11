@@ -1,18 +1,25 @@
 import { router } from '@inertiajs/core';
 import { getCurrentClient } from '@larabug/browser';
-import { LaraBugOptions } from '@larabug/core';
+import { LaraBugOptions, DataFilter } from '@larabug/core';
 
 export interface InertiaLaraBugOptions {
   /** Track page visits as breadcrumbs */
   trackPageVisits?: boolean;
-  
+
   /** Track Inertia errors */
   trackErrors?: boolean;
-  
+
   /** Track navigation events */
   trackNavigations?: boolean;
-  
-  /** Include request data in error context */
+
+  /**
+   * Include Inertia page.props in the error context. Defaults to **false**
+   * because page props regularly contain authenticated user data, CSRF
+   * tokens, session flash, and other sensitive payloads. When you opt in,
+   * the props go through the LaraBug data filter before being attached, but
+   * the safest default is to leave them off and rely on setUserFromInertia
+   * / attachLaravelContext for the specific bits you want.
+   */
   includeRequestData?: boolean;
 }
 
@@ -45,8 +52,12 @@ export function createInertiaLaraBugPlugin(options: InertiaLaraBugOptions = {}) 
     trackPageVisits = true,
     trackErrors = true,
     trackNavigations = true,
-    includeRequestData = true,
+    includeRequestData = false,
   } = options;
+
+  // Local DataFilter for any Inertia-specific data we attach. Uses the
+  // default blacklist — users can extend it globally on the LaraBug client.
+  const dataFilter = new DataFilter();
 
   return {
     install() {
@@ -56,7 +67,7 @@ export function createInertiaLaraBugPlugin(options: InertiaLaraBugOptions = {}) 
         console.error('[LaraBug] Client not initialized. Call LaraBug.init() before using the Inertia plugin.');
         return;
       }
-      
+
       // Ensure framework tag is set
       client.setTag('framework', 'inertia');
 
@@ -69,16 +80,17 @@ export function createInertiaLaraBugPlugin(options: InertiaLaraBugOptions = {}) 
             message: 'Page visit',
             data: {
               component: event.detail.page.component,
-              url: event.detail.page.url,
+              url: dataFilter.filterUrl(event.detail.page.url),
               method: 'visit',
             },
           });
 
-          // Set page context
+          // Set page context. Props are only included when the caller has
+          // explicitly opted in, and even then they're filtered first.
           client.setContext('page', {
             component: event.detail.page.component,
-            url: event.detail.page.url,
-            props: includeRequestData ? event.detail.page.props : undefined,
+            url: dataFilter.filterUrl(event.detail.page.url),
+            props: includeRequestData ? dataFilter.filter(event.detail.page.props) : undefined,
           });
         });
       }
@@ -91,7 +103,7 @@ export function createInertiaLaraBugPlugin(options: InertiaLaraBugOptions = {}) 
             category: 'inertia',
             message: 'Navigation started',
             data: {
-              url: event.detail.visit.url.toString(),
+              url: dataFilter.filterUrl(event.detail.visit.url.toString()),
               method: event.detail.visit.method,
             },
           });
@@ -115,44 +127,48 @@ export function createInertiaLaraBugPlugin(options: InertiaLaraBugOptions = {}) 
             category: 'inertia',
             message: 'Navigation finished',
             data: {
-              url: event.detail.visit.url.toString(),
+              url: dataFilter.filterUrl(event.detail.visit.url.toString()),
             },
             level: 'debug',
           });
         });
       }
 
-      // Track errors
+      // Track errors. The errors object from Inertia is run through the
+      // DataFilter so any field names matching the blacklist are filtered
+      // before being attached to the exception context.
       if (trackErrors) {
         router.on('error', (event) => {
           const error = new Error('Inertia request failed');
-          
+
           client.captureException(error, {
             mechanism: 'inertia-error',
-            url: event.detail.visit.url.toString(),
+            url: dataFilter.filterUrl(event.detail.visit.url.toString()),
             method: event.detail.visit.method,
-            errors: event.detail.errors,
+            errors: dataFilter.filter(event.detail.errors),
           });
         });
 
         router.on('exception', (event) => {
           client.captureException(event.detail.exception, {
             mechanism: 'inertia-exception',
-            url: event.detail.visit.url.toString(),
+            url: dataFilter.filterUrl(event.detail.visit.url.toString()),
             method: event.detail.visit.method,
           });
         });
       }
 
-      // Track invalid visits
+      // Track invalid visits. Responses are NOT attached to the breadcrumb
+      // unless includeRequestData is on — they typically contain the raw
+      // HTML the server returned, which can carry CSRF tokens and user data.
       router.on('invalid', (event) => {
         client.addBreadcrumb({
           type: 'error',
           category: 'inertia',
           message: 'Invalid Inertia response',
-          data: {
-            response: event.detail.response,
-          },
+          data: includeRequestData
+            ? { response: dataFilter.filter(event.detail.response) }
+            : undefined,
           level: 'warning',
         });
       });
@@ -174,14 +190,17 @@ export function createInertiaLaraBugPlugin(options: InertiaLaraBugOptions = {}) 
  */
 export function setUserFromInertia(user: any): void {
   const client = getCurrentClient();
-  
+
   if (client && user) {
-    client.setUser({
+    // Route the user object through the DataFilter so any password/token-ish
+    // fields the app happens to put on its user model don't leak out.
+    const filtered = new DataFilter().filter({
       id: user.id,
       email: user.email,
       name: user.name,
       ...user,
     });
+    client.setUser(filtered as any);
   }
 }
 
