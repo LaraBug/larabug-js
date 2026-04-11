@@ -1,6 +1,6 @@
 {
   "name": "@larabug/javascript",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Official LaraBug JavaScript SDK monorepo for browser error tracking",
   "repository": {
