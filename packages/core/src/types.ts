@@ -43,6 +43,33 @@ export interface LaraBugOptions {
 
   /** Verify SSL certificates (defaults to true) */
   verifySSL?: boolean;
+
+  /**
+   * Additional object key patterns the data filter should treat as sensitive.
+   * Matched case-insensitively against keys via substring. Merged with the
+   * SDK's default blacklist (password, token, secret, auth, cookie, etc.).
+   *
+   * Mirrors the PHP SDK's `larabug.blacklist` config key.
+   */
+  blacklist?: string[];
+
+  /**
+   * Additional query-string parameter names to filter in URLs. Merged with
+   * the default list (token, access_token, refresh_token, api_key, ...).
+   */
+  urlBlacklist?: string[];
+
+  /**
+   * Hard cap on events emitted per minute from this client. Any event above
+   * this budget is dropped, not queued. Defaults to 100.
+   */
+  maxEventsPerMinute?: number;
+
+  /**
+   * Window (in ms) during which two identical events are treated as a
+   * duplicate and suppressed. Defaults to 5000.
+   */
+  dedupeWindowMs?: number;
 }
 
 /**
