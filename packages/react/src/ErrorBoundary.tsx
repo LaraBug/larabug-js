@@ -70,6 +70,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     // Send to LaraBug
     const client = getCurrentClient();
     if (client) {
+      // Ensure framework tag is set
+      client.setTag('framework', 'react');
+      
       client.captureException(error, {
         mechanism: 'react-error-boundary',
         componentStack: errorInfo.componentStack,

@@ -1,5 +1,5 @@
 import { App, Plugin } from 'vue';
-import { init, BrowserClient } from '@larabug/browser';
+import { init as browserInit, BrowserClient, getCurrentClient as getBrowserClient } from '@larabug/browser';
 import { LaraBugOptions } from '@larabug/core';
 
 export interface VueLaraBugOptions extends LaraBugOptions {
@@ -31,7 +31,7 @@ export interface VueLaraBugOptions extends LaraBugOptions {
  * ```
  */
 export const LaraBugVuePlugin: Plugin = {
-  install(app: App, options: VueLaraBugOptions) {
+  install(app: App, options: VueLaraBugOptions = {}) {
     const {
       attachProps = true,
       trackLifecycleHooks = false,
@@ -39,8 +39,21 @@ export const LaraBugVuePlugin: Plugin = {
       ...larabugOptions
     } = options;
 
-    // Initialize LaraBug client
-    const client = init(larabugOptions);
+    // Get existing client or initialize new one if DSN provided
+    let client = getBrowserClient();
+    
+    if (!client && Object.keys(larabugOptions).length > 0) {
+      // If no client exists but options provided, initialize
+      client = browserInit(larabugOptions);
+    }
+    
+    if (!client) {
+      console.error('[LaraBug] Client not initialized. Call LaraBug.init() before using the Vue plugin.');
+      return;
+    }
+    
+    // Ensure framework tag is set
+    client.setTag('framework', 'vue');
 
     // Store client on app
     app.config.globalProperties.$larabug = client;
@@ -50,6 +63,9 @@ export const LaraBugVuePlugin: Plugin = {
 
     app.config.errorHandler = (err: unknown, instance, info) => {
       const error = err instanceof Error ? err : new Error(String(err));
+
+      // Ensure framework tag is set
+      client.setTag('framework', 'vue');
 
       // Build context from Vue component
       const context: Record<string, any> = {

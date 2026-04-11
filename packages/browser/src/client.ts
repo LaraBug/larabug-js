@@ -1,13 +1,22 @@
-import { BaseLaraBugClient, LaraBugOptions, RequestInfo } from '@larabug/core';
+import { BaseLaraBugClient, LaraBugOptions, RequestInfo, DataFilter } from '@larabug/core';
 
 /**
  * Browser-specific LaraBug client with automatic instrumentation
  */
 export class BrowserClient extends BaseLaraBugClient {
   private installed = false;
+  private breadcrumbFilter: DataFilter;
 
   constructor(options: LaraBugOptions) {
     super(options);
+    // A separate DataFilter instance for breadcrumbs. Same default blacklist
+    // as the core filter, but applied *before* breadcrumbs are pushed into
+    // the buffer — so even if the SDK is later reconfigured, the breadcrumbs
+    // already in memory are safe.
+    this.breadcrumbFilter = new DataFilter({
+      blacklist: options.blacklist,
+      urlBlacklist: options.urlBlacklist,
+    });
     this.install();
   }
 
@@ -71,7 +80,10 @@ export class BrowserClient extends BaseLaraBugClient {
   }
 
   /**
-   * Instrument console methods to capture as breadcrumbs
+   * Instrument console methods to capture as breadcrumbs. Arguments run
+   * through the DataFilter before being stored so free-text secrets logged
+   * by the host app (tokens, passwords, raw API responses) never reach
+   * the ingest endpoint.
    */
   private instrumentConsole(): void {
     const consoleMethods = ['log', 'info', 'warn', 'error', 'debug'] as const;
@@ -79,17 +91,35 @@ export class BrowserClient extends BaseLaraBugClient {
     consoleMethods.forEach((method) => {
       const original = console[method];
       console[method] = (...args: any[]) => {
-        this.addBreadcrumb({
-          type: 'console',
-          category: 'console',
-          message: args.map(arg => String(arg)).join(' '),
-          level: method === 'error' ? 'error' : method === 'warn' ? 'warning' : 'info',
-          data: { arguments: args },
-        });
+        try {
+          const filteredArgs = this.breadcrumbFilter.filter(args);
+          const message = (filteredArgs as any[])
+            .map((arg) => (typeof arg === 'string' ? arg : this.safeStringify(arg)))
+            .join(' ');
+
+          this.addBreadcrumb({
+            type: 'console',
+            category: 'console',
+            message: this.breadcrumbFilter.filterMessage(message),
+            level: method === 'error' ? 'error' : method === 'warn' ? 'warning' : 'info',
+            data: { arguments: filteredArgs as any[] },
+          });
+        } catch {
+          // If filtering throws, drop the breadcrumb entirely. We never
+          // fall back to logging unfiltered data.
+        }
 
         original.apply(console, args);
       };
     });
+  }
+
+  private safeStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[Unserializable]';
+    }
   }
 
   /**
@@ -102,9 +132,13 @@ export class BrowserClient extends BaseLaraBugClient {
 
     const originalFetch = window.fetch;
 
+    const filter = this.breadcrumbFilter;
+    const self = this;
+
     window.fetch = async (...args: Parameters<typeof fetch>) => {
       const [resource, options] = args;
-      const url = typeof resource === 'string' ? resource : resource.url;
+      const rawUrl = typeof resource === 'string' ? resource : resource.url;
+      const url = filter.filterUrl(rawUrl);
       const method = options?.method || 'GET';
 
       const startTime = Date.now();
@@ -113,7 +147,7 @@ export class BrowserClient extends BaseLaraBugClient {
         const response = await originalFetch(...args);
         const duration = Date.now() - startTime;
 
-        this.addBreadcrumb({
+        self.addBreadcrumb({
           type: 'http',
           category: 'fetch',
           data: {
@@ -129,7 +163,7 @@ export class BrowserClient extends BaseLaraBugClient {
       } catch (error) {
         const duration = Date.now() - startTime;
 
-        this.addBreadcrumb({
+        self.addBreadcrumb({
           type: 'http',
           category: 'fetch',
           data: {
@@ -152,30 +186,35 @@ export class BrowserClient extends BaseLaraBugClient {
   private instrumentXHR(): void {
     const originalOpen = XMLHttpRequest.prototype.open;
     const originalSend = XMLHttpRequest.prototype.send;
+    const filter = this.breadcrumbFilter;
 
-    XMLHttpRequest.prototype.open = function(
+    XMLHttpRequest.prototype.open = function (
       method: string,
       url: string | URL,
       ...rest: any[]
     ) {
       // @ts-ignore
-      this.__larabug = { method, url: url.toString(), startTime: Date.now() };
+      this.__larabug = {
+        method,
+        url: filter.filterUrl(url.toString()),
+        startTime: Date.now(),
+      };
       return originalOpen.apply(this, [method, url, ...rest]);
     };
 
-    XMLHttpRequest.prototype.send = function(...args: any[]) {
+    XMLHttpRequest.prototype.send = function (...args: any[]) {
       const client = (globalThis as any).__larabugClient as BrowserClient;
 
       if (this.__larabug && client) {
-        this.addEventListener('load', function() {
-          const duration = Date.now() - this.__larabug.startTime;
+        this.addEventListener('load', function () {
+          const duration = Date.now() - this.__larabug!.startTime;
 
           client.addBreadcrumb({
             type: 'http',
             category: 'xhr',
             data: {
-              url: this.__larabug.url,
-              method: this.__larabug.method,
+              url: this.__larabug!.url,
+              method: this.__larabug!.method,
               status_code: this.status,
               duration,
             },
@@ -183,15 +222,15 @@ export class BrowserClient extends BaseLaraBugClient {
           });
         });
 
-        this.addEventListener('error', function() {
-          const duration = Date.now() - this.__larabug.startTime;
+        this.addEventListener('error', function () {
+          const duration = Date.now() - this.__larabug!.startTime;
 
           client.addBreadcrumb({
             type: 'http',
             category: 'xhr',
             data: {
-              url: this.__larabug.url,
-              method: this.__larabug.method,
+              url: this.__larabug!.url,
+              method: this.__larabug!.method,
               duration,
             },
             level: 'error',
@@ -207,17 +246,21 @@ export class BrowserClient extends BaseLaraBugClient {
   }
 
   /**
-   * Capture navigation breadcrumbs
+   * Capture navigation breadcrumbs. All URLs — including document.referrer,
+   * which frequently carries session tokens from third-party sites — are
+   * routed through the DataFilter before being recorded.
    */
   private captureNavigation(): void {
+    const filter = this.breadcrumbFilter;
+
     // Capture initial page load
     this.addBreadcrumb({
       type: 'navigation',
       category: 'navigation',
       message: 'Page loaded',
       data: {
-        from: document.referrer,
-        to: window.location.href,
+        from: filter.filterUrl(document.referrer),
+        to: filter.filterUrl(window.location.href),
       },
     });
 
@@ -234,7 +277,10 @@ export class BrowserClient extends BaseLaraBugClient {
             type: 'navigation',
             category: 'navigation',
             message: 'Navigation',
-            data: { from, to },
+            data: {
+              from: filter.filterUrl(from),
+              to: filter.filterUrl(to),
+            },
           });
         }
 
@@ -249,8 +295,8 @@ export class BrowserClient extends BaseLaraBugClient {
         category: 'navigation',
         message: 'Hash changed',
         data: {
-          from: event.oldURL,
-          to: event.newURL,
+          from: filter.filterUrl(event.oldURL),
+          to: filter.filterUrl(event.newURL),
         },
       });
     });
@@ -270,6 +316,8 @@ export class BrowserClient extends BaseLaraBugClient {
 }
 
 // Extend XMLHttpRequest type
+export {}; // Make this a module
+
 declare global {
   interface XMLHttpRequest {
     __larabug?: {
