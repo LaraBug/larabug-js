@@ -15,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/LaraBug/larabug-javascript",
+    "url": "https://github.com/LaraBug/larabug-js",
     "directory": "packages/react"
   },
   "keywords": [
