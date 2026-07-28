@@ -33,11 +33,12 @@ All packages require an `LB_DSN` (or separate `login_key` + `project_key`) from 
 
 ## Documentation
 
-Full documentation — configuration, framework integrations, data filtering, source maps — lives at **[larabug.com/docs](https://www.larabug.com/docs)**.
+Full documentation (configuration, framework integrations, data filtering, source maps) lives at **[larabug.com/docs](https://www.larabug.com/docs)**.
 
 ## Related
 
-- [LaraBug Laravel SDK](https://github.com/LaraBug/LaraBug) — Laravel error and queue job tracking for Laravel.
+- [LaraBug Laravel SDK](https://github.com/LaraBug/LaraBug). Laravel exception and queue job tracking.
+- [LaraBug Mobile](https://github.com/LaraBug/larabug-mobile). The iOS and Android app.
 
 ## License
 
