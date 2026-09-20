@@ -28,6 +28,7 @@
     "lint": "eslint packages --ext .ts,.tsx",
     "lint:fix": "eslint packages --ext .ts,.tsx --fix",
     "clean": "lerna run clean && rm -rf node_modules",
+    "playground": "node playground/server.mjs",
     "prepare": "npm run build"
   },
   "devDependencies": {
