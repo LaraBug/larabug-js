@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LaraBug JavaScript SDK playground</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/config.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>LaraBug JavaScript SDK playground</h1>
+      <p class="lede">
+        This page loads <code>@larabug/browser</code> from a single script tag, the way a plain site
+        would. Every button below produces a different kind of failure. The right-hand column shows
+        what the SDK actually put on the wire.
+      </p>
+    </header>
+
+    <main>
+      <section class="panel" id="setup">
+        <h2>1. Where events go</h2>
+        <p class="hint">
+          Defaults to the fake ingest server this playground starts on loopback. Point it at a local
+          LaraBug install by pasting that project's DSN.
+        </p>
+        <label>
+          Endpoint
+          <input id="endpoint" type="text" spellcheck="false" />
+        </label>
+        <label>
+          DSN <span class="muted">(optional, overrides the endpoint)</span>
+          <input
+            id="dsn"
+            type="text"
+            spellcheck="false"
+            placeholder="https://login_key:project_key@larabug-app.test/api/log"
+          />
+        </label>
+        <div class="row">
+          <button id="boot" class="primary">Initialise SDK</button>
+          <span id="boot-state" class="status">not initialised</span>
+        </div>
+      </section>
+
+      <section class="panel" id="server">
+        <h2>2. How the server answers</h2>
+        <p class="hint">
+          Only applies to the built-in fake ingest server. Use these to watch the SDK's rate limiter,
+          cooldown and circuit breaker react to the responses the real API sends.
+        </p>
+        <label>
+          Response mode
+          <select id="mode"></select>
+        </label>
+        <label class="checkbox">
+          <input id="expose-retry-after" type="checkbox" checked />
+          Send <code>Access-Control-Expose-Headers: Retry-After</code>
+        </label>
+        <p class="hint">
+          Turn that off to reproduce a server that sends <code>Retry-After</code> but never exposes
+          it cross-origin. The header is on the response, and browser JavaScript cannot read it.
+        </p>
+      </section>
+
+      <section class="panel" id="scenarios">
+        <h2>3. Break something</h2>
+
+        <h3>Errors the SDK is supposed to catch on its own</h3>
+        <div class="buttons">
+          <button data-scenario="uncaught-type-error">Uncaught TypeError</button>
+          <button data-scenario="async-throw">Throw inside setTimeout</button>
+          <button data-scenario="unhandled-rejection">Unhandled promise rejection</button>
+          <button data-scenario="thrown-string">Reject with a non-Error</button>
+        </div>
+
+        <h3>Errors you report yourself</h3>
+        <div class="buttons">
+          <button data-scenario="capture-exception">captureException with context</button>
+          <button data-scenario="capture-message">captureMessage (warning)</button>
+          <button data-scenario="set-user">setUser, then throw</button>
+        </div>
+
+        <h3>Data handling</h3>
+        <div class="buttons">
+          <button data-scenario="sensitive">Report secrets in context and URL</button>
+          <button data-scenario="breadcrumbs">Leave a breadcrumb trail, then throw</button>
+        </div>
+
+        <h3>Guardrails</h3>
+        <div class="buttons">
+          <button data-scenario="duplicates">Throw the same error 5&times;</button>
+          <button data-scenario="flood">Throw 120 distinct errors</button>
+          <button data-scenario="large-payload">Throw with a very large payload</button>
+        </div>
+
+        <div class="row tally">
+          <span>Capture calls made: <strong id="tally-attempted">0</strong></span>
+          <span>Requests the server saw: <strong id="tally-received">0</strong></span>
+        </div>
+      </section>
+
+      <section class="panel feed">
+        <div class="feed-head">
+          <h2>What the SDK reported</h2>
+          <div class="row">
+            <label class="checkbox compact">
+              <input id="show-raw" type="checkbox" />
+              Raw payload
+            </label>
+            <button id="clear" class="ghost">Clear</button>
+          </div>
+        </div>
+        <p class="hint" id="feed-hint">
+          Nothing yet. Initialise the SDK and press a button.
+        </p>
+        <ol id="events" reversed></ol>
+      </section>
+    </main>
+
+    <script src="/sdk/larabug.umd.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
