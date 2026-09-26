@@ -1,29 +1,17 @@
 /**
  * Configuration options for LaraBug client
- *
- * Every field is optional and every field is validated at construction time.
- * Options reach the SDK from places that are not TypeScript (a Blade template,
- * a `.env` file read by a server-side package, a hand-written script tag), so
- * a missing or wrong-typed value turns reporting off and says so once. It
- * never throws: see `BaseLaraBugClient`.
  */
 export interface LaraBugOptions {
   /**
-   * Your project's ingest key, from the project's settings (prefixed `lbi_`).
-   *
-   * Write-only and scoped to the one project, which makes it the only
-   * credential that is safe to render into a page every visitor can read.
-   * Sufficient on its own: it identifies the project, so `project_key` is not
-   * needed alongside it.
+   * Your project's ingest key, from its settings (prefixed `lbi_`). Write-only
+   * and scoped to one project, so it is safe to put in a page your visitors can
+   * read. Sufficient on its own: it needs no `project_key` beside it.
    */
   ingest_key?: string;
 
   /**
-   * Your LaraBug login key (the account api_token, from your profile).
-   *
-   * Account-wide, so it must never appear in browser JavaScript. Kept for the
-   * SDKs already deployed with it, and only usable together with
-   * `project_key`. Prefer `ingest_key` for anything a browser loads.
+   * Your LaraBug login key (the account api_token, from your profile). Account
+   * wide, so it does not belong in browser JavaScript. Requires `project_key`.
    *
    * @deprecated Use `ingest_key` (or a `dsn`, which now carries one).
    */
@@ -37,11 +25,7 @@ export interface LaraBugOptions {
 
   /**
    * DSN string (format: https://key:project_key@host/path) - overrides
-   * individual keys.
-   *
-   * The first field is a project ingest key on a DSN issued today, and an
-   * account login key on an older one. The SDK tells them apart by the `lbi_`
-   * prefix, so the same option accepts either.
+   * individual keys. The first field may be an ingest key or a login key.
    */
   dsn?: string;
 
@@ -103,20 +87,11 @@ export interface LaraBugOptions {
   dedupeWindowMs?: number;
 }
 
-/**
- * Whether a client is reporting, and why it isn't when it isn't.
- *
- * A client that cannot report is inert rather than broken, so nothing else
- * signals the problem. This is how code asks.
- */
+/** Whether a client is reporting, and why it isn't when it isn't. */
 export interface LaraBugClientStatus {
-  /** True when the client has a usable credential and reporting is enabled. */
   active: boolean;
 
-  /**
-   * Why the client is inert, in a sentence fit to show a developer. Null
-   * while `active` is true.
-   */
+  /** Why the client is inert. Null while `active` is true. */
   reason: string | null;
 }
 

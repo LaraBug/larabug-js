@@ -17,20 +17,16 @@ let originals: {
 let fetchMock: jest.Mock;
 let warnMock: jest.Mock;
 
-/**
- * init() installs listeners on the window, and jsdom hands the whole file one
- * window. Without taking them off again, a client from an earlier test would
- * still be listening during a later one and would answer for it.
- */
+// jsdom hands the whole file one window, so listeners are tracked and removed
+// after each test: a client from an earlier test would otherwise answer here.
 let installedListeners: Array<[string, any]>;
 
 beforeEach(() => {
   fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
   window.fetch = fetchMock as unknown as typeof window.fetch;
 
-  // Silenced before the originals are captured, so that the assertions about
-  // which globals the SDK leaves alone compare against this and not the real
-  // console.warn.
+  // Silenced before the originals are captured, so the assertions about which
+  // globals the SDK leaves alone compare against this, not the real warn.
   warnMock = jest.spyOn(console, 'warn').mockImplementation(() => undefined) as unknown as jest.Mock;
 
   installedListeners = [];
@@ -81,11 +77,6 @@ describe('init', () => {
   });
 });
 
-/**
- * A misconfigured tracker has to leave the page exactly as it found it. It
- * cannot report, so patching console, fetch and XHR would buy nothing and
- * would cost the host app the wrappers.
- */
 describe('a client with no usable credentials', () => {
   it('leaves the console alone', () => {
     init({});
@@ -170,10 +161,6 @@ describe('a client with an ingest key', () => {
   });
 });
 
-/**
- * One instrumentation step failing must cost that step and nothing else. The
- * whole point is that the host bundle keeps running.
- */
 describe('instrumentation that cannot be installed', () => {
   it('does not stop init, and does not stop the other steps', () => {
     (window.addEventListener as unknown as jest.Mock).mockImplementation(() => {

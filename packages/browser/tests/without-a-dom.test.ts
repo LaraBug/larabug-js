@@ -1,7 +1,3 @@
-/**
- * The browser build gets imported into server-side renders and into build-time
- * prerenders. There is nothing to instrument there, and nothing to break.
- */
 import { init } from '../src';
 
 describe('init without a DOM', () => {

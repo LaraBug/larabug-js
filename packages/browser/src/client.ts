@@ -7,11 +7,7 @@ export class BrowserClient extends BaseLaraBugClient {
   private installed = false;
   private breadcrumbFilter: DataFilter;
 
-  /**
-   * Cannot throw, for any input. This client is loaded before the code it
-   * watches, so anything that escapes here escapes at the top level of the
-   * host's bundle and takes every module after it down with it.
-   */
+  /** Cannot throw, for any input. See BaseLaraBugClient. */
   constructor(options: LaraBugOptions = {}) {
     super(options);
     this.breadcrumbFilter = this.createBreadcrumbFilter(options);
@@ -23,9 +19,6 @@ export class BrowserClient extends BaseLaraBugClient {
    * the core filter, but applied *before* breadcrumbs are pushed into the
    * buffer — so even if the SDK is later reconfigured, the breadcrumbs already
    * in memory are safe.
-   *
-   * Falls back to the default filter if the caller's additions can't be read.
-   * That still carries the whole default blacklist; it just misses the extras.
    */
   private createBreadcrumbFilter(options: LaraBugOptions): DataFilter {
     try {
@@ -46,15 +39,12 @@ export class BrowserClient extends BaseLaraBugClient {
       return;
     }
 
-    // An inert client will never send anything, so it has no business patching
-    // console, fetch and XHR. A misconfigured SDK leaves the page as it found
-    // it. See BaseLaraBugClient#getStatus for why a client ends up inert.
+    // Nothing is ever sent from an inert client, so patching console, fetch and
+    // XHR would cost the host app its own wrappers and buy nothing.
     if (!this.isActive()) {
       return;
     }
 
-    // Imported into a server-side render, or any other host without a DOM.
-    // Nothing to instrument; capture still works through the core client.
     if (typeof window === 'undefined' || typeof document === 'undefined') {
       return;
     }
@@ -69,11 +59,7 @@ export class BrowserClient extends BaseLaraBugClient {
     this.installed = true;
   }
 
-  /**
-   * Install one piece of instrumentation. A step that fails costs us that step
-   * and nothing else: the other steps stay installed, the client stays up, and
-   * the exception never reaches the page.
-   */
+  /** Install one piece of instrumentation. A step that fails costs only itself. */
   private safely(step: string, install: () => void): void {
     try {
       install();

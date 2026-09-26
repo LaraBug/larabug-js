@@ -1,10 +1,5 @@
 import { BaseLaraBugClient, LaraBugOptions } from '../src';
 
-/**
- * The SDK is installed before the code it watches, so anything that escapes
- * construction escapes at the top level of the host's bundle and takes every
- * module after it with it. These are the inputs that used to do exactly that.
- */
 describe('construction never throws', () => {
   let warn: jest.SpyInstance;
 
@@ -21,7 +16,7 @@ describe('construction never throws', () => {
     expect(() => new BaseLaraBugClient({})).not.toThrow();
   });
 
-  it('accepts missing credentials, which is the case that took a site down', () => {
+  it('accepts missing credentials', () => {
     expect(() => new BaseLaraBugClient({ project_key: 'project-only' })).not.toThrow();
     expect(() => new BaseLaraBugClient({ login_key: 'login-only' })).not.toThrow();
     expect(() => new BaseLaraBugClient({ login_key: '', project_key: '' })).not.toThrow();
@@ -33,7 +28,7 @@ describe('construction never throws', () => {
     expect(() => new BaseLaraBugClient('nonsense' as unknown as LaraBugOptions)).not.toThrow();
   });
 
-  it('accepts values of the wrong type, which is what a .env round trip produces', () => {
+  it('accepts values of the wrong type, as a .env round trip produces', () => {
     const wrong = {
       login_key: 42,
       project_key: true,

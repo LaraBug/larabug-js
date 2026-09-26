@@ -8,7 +8,6 @@ type SentRequest = {
 
 let fetchMock: jest.Mock;
 
-/** The one request a capture produces, or a failure if it produced none. */
 function sent(): SentRequest {
   expect(fetchMock).toHaveBeenCalledTimes(1);
 
@@ -108,13 +107,8 @@ describe('the deployed login key and project key pair', () => {
   });
 });
 
-describe('an ingest key that arrives in the wrong field', () => {
-  /**
-   * The workaround in the field before `ingest_key` existed. It reached the
-   * server as a bearer token, which the ingest middleware happens to read.
-   * Now it is recognised for what it is and sent as an ingest key.
-   */
-  it('is recognised by its prefix and sent as an ingest key', () => {
+describe('an ingest key passed as the login_key, as the panel DSN and the old workaround both do', () => {
+  it('is recognised by its prefix and sent as an ingest key, not as a bearer token', () => {
     const request = capture({ login_key: 'lbi_pasted_in_the_wrong_field' });
 
     expect(request.headers['X-LaraBug-Ingest-Key']).toBe('lbi_pasted_in_the_wrong_field');

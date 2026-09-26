@@ -9,12 +9,12 @@ let globalClient: BrowserClient | null = null;
 /**
  * Initialize LaraBug for the browser
  *
- * Never throws, whatever it is handed. A client that has no usable credentials
- * warns once and comes back inert, so a missing key costs you error reporting
- * and nothing else on the page. Ask the returned client with `isActive()`, or
- * `getStatus()` for the reason.
+ * Never throws. A client with no usable credentials warns once and comes back
+ * inert; ask it with `isActive()`, or `getStatus()` for the reason.
  */
 export function init(options: LaraBugOptions = {}): BrowserClient {
+  // Always a client, never null: @larabug/react, /vue and /inertia call
+  // .setTag() on whatever this returns.
   globalClient = new BrowserClient(options);
   return globalClient;
 }

@@ -21,21 +21,12 @@ import { RateLimiter } from './rate-limiter';
  */
 let __captureInFlight = false;
 
-/**
- * Prefix of a project's write-only ingest key. The server distinguishes an
- * ingest key from an account api_token by this prefix alone, everywhere both
- * can arrive, so the SDK can classify a credential the same way without
- * having to be told which kind it was handed.
- */
 const INGEST_KEY_PREFIX = 'lbi_';
 
 const DEFAULT_ENDPOINT = 'https://www.larabug.com/api/log';
 
-/**
- * Option readers. Options arrive from places that are not TypeScript, so
- * nothing here trusts a declared type: a wrong-typed value falls back to the
- * default rather than reaching code that would throw on it later.
- */
+// Options arrive from places that are not TypeScript, so nothing below trusts
+// a declared type.
 function asText(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
@@ -52,7 +43,6 @@ function asStringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
-/** Say something to the developer without assuming a console exists. */
 function warn(message: string, detail?: unknown): void {
   if (typeof console === 'undefined' || !console.warn) {
     return;
@@ -68,15 +58,10 @@ function warn(message: string, detail?: unknown): void {
 /**
  * Core LaraBug client implementation
  *
- * Construction cannot throw, for any input. An error tracker is installed
- * before the code it watches, so a constructor that throws takes out every
- * module after it in the bundle: one missing key becomes a page with no
- * JavaScript at all. A client that cannot report is therefore inert instead,
- * warns once, and reports why through `isActive()` / `getStatus()`.
- *
- * Errors belonging to the host application are not swallowed: those still
- * reach the host's own handlers, and the instrumentation in @larabug/browser
- * rethrows everything it observes.
+ * Construction cannot throw, for any input. The SDK is installed before the
+ * code it watches, so a throwing constructor takes out every module after it
+ * in the host's bundle. A client that cannot report is inert instead, warns
+ * once, and says why through `isActive()` / `getStatus()`.
  */
 export class BaseLaraBugClient implements LaraBugClient {
   private options: Required<LaraBugOptions>;
@@ -97,9 +82,8 @@ export class BaseLaraBugClient implements LaraBugClient {
       normalized = this.normalizeOptions(options);
       status = this.resolveStatus(normalized);
     } catch (error) {
-      // normalizeOptions reads every value defensively, so arriving here means
-      // the options object itself misbehaved: a throwing getter, a revoked
-      // proxy. Reporting goes off and the page carries on regardless.
+      // normalizeOptions reads every value defensively, so reaching here means
+      // the options object itself misbehaved: a throwing getter, a dead proxy.
       normalized = this.normalizeOptions({});
       status = { active: false, reason: 'the options object could not be read' };
       failure = error;
@@ -108,8 +92,7 @@ export class BaseLaraBugClient implements LaraBugClient {
     this.options = normalized;
     this.status = status;
 
-    // One warning, only when the caller did not ask for silence. A client that
-    // was deliberately turned off with `enabled: false` says nothing.
+    // Silent when the caller asked for silence with `enabled: false`.
     if (!status.active && status.reason !== null && normalized.enabled) {
       warn(
         `[LaraBug] Error reporting is off: ${status.reason}. ` +
@@ -137,8 +120,7 @@ export class BaseLaraBugClient implements LaraBugClient {
     let endpoint = asText(given.endpoint) || DEFAULT_ENDPOINT;
     const dsn = asText(given.dsn);
 
-    // A DSN that parses replaces the credentials rather than topping them up:
-    // it is one value that carries all of them.
+    // A DSN that parses replaces the credentials rather than topping them up.
     if (dsn) {
       const parsed = this.parseDsn(dsn);
       if (parsed) {
@@ -149,10 +131,9 @@ export class BaseLaraBugClient implements LaraBugClient {
       }
     }
 
-    // The panel hands out a DSN whose first field is the project's ingest key,
-    // and the workaround before this option existed was to paste that key into
-    // login_key by hand. Both land here, and the prefix says what the value
-    // really is, so it goes out as an ingest key rather than as a bearer token.
+    // The panel's DSN carries the ingest key in the field that used to hold the
+    // login key, and so does a key pasted in by hand. The prefix is what the
+    // server tells them apart by, so an ingest key never goes out as a bearer.
     if (!ingest_key && login_key.startsWith(INGEST_KEY_PREFIX)) {
       ingest_key = login_key;
       login_key = '';
@@ -188,16 +169,12 @@ export class BaseLaraBugClient implements LaraBugClient {
   }
 
   /**
-   * Whether this client can report, and why not when it cannot.
-   *
    * Two credentials reach the ingest route: a project's ingest key on its own,
-   * which identifies the project and authorises nothing else, or the older
-   * account login key paired with a project key. Anything else is a
-   * misconfiguration, and a misconfiguration turns reporting off.
+   * or the older account login key paired with a project key.
    */
   private resolveStatus(options: Required<LaraBugOptions>): LaraBugClientStatus {
-    // Asked for first, answered first: a caller who turned reporting off does
-    // not need to hear about the keys they therefore did not have to supply.
+    // Before the credentials, so that a caller who turned reporting off is not
+    // told about keys they therefore did not have to supply.
     if (!options.enabled) {
       return { active: false, reason: 'the enabled option is false' };
     }
@@ -217,13 +194,9 @@ export class BaseLaraBugClient implements LaraBugClient {
   /**
    * Parse DSN string (format: https://credential:project_key@host/path)
    *
-   * The first field is a project ingest key on a DSN issued today and an
-   * account login key on an older one; normalizeOptions decides which by its
-   * prefix. An ingest key names its project on its own, so the second field
-   * is optional for one.
-   *
-   * Returns null for a DSN it cannot use, leaving any explicitly passed keys
-   * to stand on their own.
+   * An ingest key names its project on its own, so the second field is optional
+   * for one. Returns null for a DSN it cannot use, leaving explicitly passed
+   * keys to stand.
    */
   private parseDsn(dsn: string): { credential: string; project_key: string; endpoint: string } | null {
     try {
@@ -368,12 +341,7 @@ export class BaseLaraBugClient implements LaraBugClient {
     return { ...this.options };
   }
 
-  /**
-   * Whether this client will actually report anything.
-   *
-   * False when it has no usable credentials, or when reporting was turned off
-   * on purpose. `getStatus()` says which.
-   */
+  /** Whether this client will actually report anything. `getStatus()` says why not. */
   isActive(): boolean {
     return this.status.active;
   }
@@ -413,9 +381,8 @@ export class BaseLaraBugClient implements LaraBugClient {
   /**
    * Capture current request information
    *
-   * Protected because @larabug/browser overrides it. It was private on both
-   * classes, which at runtime still let the subclass shadow this one while
-   * telling TypeScript the two were unrelated.
+   * Protected, not private: @larabug/browser overrides it, and private on both
+   * let the subclass shadow this at runtime while TypeScript saw no relation.
    */
   protected captureRequestInfo(): RequestInfo | undefined {
     if (typeof window === 'undefined') {
@@ -560,10 +527,8 @@ export class BaseLaraBugClient implements LaraBugClient {
 
     const url = `${this.options.endpoint}`;
 
-    // Wrap event with project key and type (matching PHP SDK format). The
-    // project is omitted when we don't have one: an ingest key already names
-    // the project server-side, and an empty `project` would only be a field
-    // the server has to decide to ignore.
+    // Wrap event with project key and type (matching PHP SDK format). An ingest
+    // key already names the project server-side, so the field is omitted then.
     const payload = JSON.stringify({
       type: 'javascript_error',
       ...(this.options.project_key ? { project: this.options.project_key } : {}),
@@ -577,13 +542,9 @@ export class BaseLaraBugClient implements LaraBugClient {
   }
 
   /**
-   * Credentials and headers for an ingest request.
-   *
-   * The ingest key goes in a header of its own, which is where the server
-   * looks first. The account login key goes in the Authorization header it
-   * always used, and only when there is one: `Bearer undefined` is worse than
-   * no header at all. Caller-supplied headers win over both, which is what
-   * kept the header workaround working before `ingest_key` existed.
+   * Credentials and headers for an ingest request. Authorization is sent only
+   * when there is a login key, because `Bearer undefined` is worse than no
+   * header, and caller-supplied headers win over both credentials.
    */
   private buildHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
