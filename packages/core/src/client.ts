@@ -1,11 +1,13 @@
 import {
   LaraBugOptions,
   LaraBugClient,
+  LaraBugClientStatus,
   ErrorEvent,
   Breadcrumb,
   User,
   StackFrame,
   RequestInfo,
+  TransportOptions,
 } from './types';
 import { DataFilter } from './data-filter';
 import { RateLimiter } from './rate-limiter';
@@ -19,11 +21,51 @@ import { RateLimiter } from './rate-limiter';
  */
 let __captureInFlight = false;
 
+const INGEST_KEY_PREFIX = 'lbi_';
+
+const DEFAULT_ENDPOINT = 'https://www.larabug.com/api/log';
+
+// Options arrive from places that are not TypeScript, so nothing below trusts
+// a declared type.
+function asText(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function asNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function asObject<T>(value: unknown, fallback: T): T {
+  return value !== null && typeof value === 'object' ? (value as T) : fallback;
+}
+
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+}
+
+function warn(message: string, detail?: unknown): void {
+  if (typeof console === 'undefined' || !console.warn) {
+    return;
+  }
+
+  if (detail === undefined) {
+    console.warn(message);
+  } else {
+    console.warn(message, detail);
+  }
+}
+
 /**
  * Core LaraBug client implementation
+ *
+ * Construction cannot throw, for any input. The SDK is installed before the
+ * code it watches, so a throwing constructor takes out every module after it
+ * in the host's bundle. A client that cannot report is inert instead, warns
+ * once, and says why through `isActive()` / `getStatus()`.
  */
 export class BaseLaraBugClient implements LaraBugClient {
   private options: Required<LaraBugOptions>;
+  private status: LaraBugClientStatus;
   private breadcrumbs: Breadcrumb[] = [];
   private user: User | null = null;
   private context: Record<string, any> = {};
@@ -31,8 +73,34 @@ export class BaseLaraBugClient implements LaraBugClient {
   private dataFilter: DataFilter;
   private rateLimiter: RateLimiter;
 
-  constructor(options: LaraBugOptions) {
-    this.options = this.normalizeOptions(options);
+  constructor(options: LaraBugOptions = {}) {
+    let normalized: Required<LaraBugOptions>;
+    let status: LaraBugClientStatus;
+    let failure: unknown;
+
+    try {
+      normalized = this.normalizeOptions(options);
+      status = this.resolveStatus(normalized);
+    } catch (error) {
+      // normalizeOptions reads every value defensively, so reaching here means
+      // the options object itself misbehaved: a throwing getter, a dead proxy.
+      normalized = this.normalizeOptions({});
+      status = { active: false, reason: 'the options object could not be read' };
+      failure = error;
+    }
+
+    this.options = normalized;
+    this.status = status;
+
+    // Silent when the caller asked for silence with `enabled: false`.
+    if (!status.active && status.reason !== null && normalized.enabled) {
+      warn(
+        `[LaraBug] Error reporting is off: ${status.reason}. ` +
+          'The SDK is inert; the rest of the page is unaffected.',
+        failure
+      );
+    }
+
     this.dataFilter = new DataFilter({
       blacklist: this.options.blacklist,
       urlBlacklist: this.options.urlBlacklist,
@@ -44,70 +112,118 @@ export class BaseLaraBugClient implements LaraBugClient {
   }
 
   private normalizeOptions(options: LaraBugOptions): Required<LaraBugOptions> {
-    let login_key = options.login_key || '';
-    let project_key = options.project_key || '';
-    let endpoint = options.endpoint || 'https://www.larabug.com/api/log';
+    const given = asObject<LaraBugOptions>(options, {});
 
-    // Parse DSN if provided (takes precedence)
-    if (options.dsn) {
-      const parsed = this.parseDsn(options.dsn);
+    let login_key = asText(given.login_key);
+    let ingest_key = asText(given.ingest_key);
+    let project_key = asText(given.project_key);
+    let endpoint = asText(given.endpoint) || DEFAULT_ENDPOINT;
+    const dsn = asText(given.dsn);
+
+    // A DSN that parses replaces the credentials rather than topping them up.
+    if (dsn) {
+      const parsed = this.parseDsn(dsn);
       if (parsed) {
-        login_key = parsed.login_key;
+        login_key = parsed.credential;
         project_key = parsed.project_key;
         endpoint = parsed.endpoint;
+        ingest_key = '';
       }
     }
 
-    if (!login_key || !project_key) {
-      throw new Error('LaraBug: login_key and project_key are required. Use dsn or provide both keys.');
+    // The panel's DSN carries the ingest key in the field that used to hold the
+    // login key, and so does a key pasted in by hand. The prefix is what the
+    // server tells them apart by, so an ingest key never goes out as a bearer.
+    if (!ingest_key && login_key.startsWith(INGEST_KEY_PREFIX)) {
+      ingest_key = login_key;
+      login_key = '';
     }
+
+    const transport = asObject<TransportOptions>(given.transport, {});
 
     return {
       login_key,
+      ingest_key,
       project_key,
       endpoint,
-      dsn: options.dsn || '',
-      release: options.release || '',
-      environment: options.environment || 'production',
-      enabled: options.enabled !== false,
-      sampleRate: options.sampleRate ?? 1.0,
-      maxBreadcrumbs: options.maxBreadcrumbs || 100,
-      user: options.user || null,
-      context: options.context || {},
-      beforeSend: options.beforeSend || ((event) => event),
+      dsn,
+      release: asText(given.release),
+      environment: asText(given.environment) || 'production',
+      enabled: given.enabled !== false,
+      sampleRate: asNumber(given.sampleRate, 1.0),
+      maxBreadcrumbs: asNumber(given.maxBreadcrumbs, 100) || 100,
+      user: asObject<User | null>(given.user, null),
+      context: asObject<Record<string, any>>(given.context, {}),
+      beforeSend: typeof given.beforeSend === 'function' ? given.beforeSend : (event) => event,
       transport: {
-        timeout: options.transport?.timeout || 10000,
-        retries: options.transport?.retries ?? 3,
-        headers: options.transport?.headers || {},
+        timeout: asNumber(transport.timeout, 10000) || 10000,
+        retries: asNumber(transport.retries, 3),
+        headers: asObject<Record<string, string>>(transport.headers, {}),
       },
-      verifySSL: options.verifySSL !== false,
-      blacklist: options.blacklist || [],
-      urlBlacklist: options.urlBlacklist || [],
-      maxEventsPerMinute: options.maxEventsPerMinute ?? 100,
-      dedupeWindowMs: options.dedupeWindowMs ?? 5000,
+      verifySSL: given.verifySSL !== false,
+      blacklist: asStringList(given.blacklist),
+      urlBlacklist: asStringList(given.urlBlacklist),
+      maxEventsPerMinute: asNumber(given.maxEventsPerMinute, 100),
+      dedupeWindowMs: asNumber(given.dedupeWindowMs, 5000),
     };
   }
 
   /**
-   * Parse DSN string (format: https://login_key:project_key@host/path)
+   * Two credentials reach the ingest route: a project's ingest key on its own,
+   * or the older account login key paired with a project key.
    */
-  private parseDsn(dsn: string): { login_key: string; project_key: string; endpoint: string } | null {
+  private resolveStatus(options: Required<LaraBugOptions>): LaraBugClientStatus {
+    // Before the credentials, so that a caller who turned reporting off is not
+    // told about keys they therefore did not have to supply.
+    if (!options.enabled) {
+      return { active: false, reason: 'the enabled option is false' };
+    }
+
+    if (!options.ingest_key && !(options.login_key && options.project_key)) {
+      return {
+        active: false,
+        reason:
+          'no usable credentials. Pass ingest_key (your project\'s key, the one safe to put in a ' +
+          'browser), or dsn, or both login_key and project_key',
+      };
+    }
+
+    return { active: true, reason: null };
+  }
+
+  /**
+   * Parse DSN string (format: https://credential:project_key@host/path)
+   *
+   * An ingest key names its project on its own, so the second field is optional
+   * for one. Returns null for a DSN it cannot use, leaving explicitly passed
+   * keys to stand.
+   */
+  private parseDsn(dsn: string): { credential: string; project_key: string; endpoint: string } | null {
     try {
       const url = new URL(dsn);
-      const login_key = url.username;
+      const credential = url.username;
       const project_key = url.password;
 
-      if (!login_key || !project_key) {
-        throw new Error('DSN must contain both login_key and project_key');
+      if (!credential) {
+        warn('[LaraBug] Ignoring a DSN with no key in it. Expected: https://key:project_key@host/path');
+        return null;
+      }
+
+      if (!credential.startsWith(INGEST_KEY_PREFIX) && !project_key) {
+        warn(
+          '[LaraBug] Ignoring a DSN with no project key in it. Expected: ' +
+            'https://login_key:project_key@host/path'
+        );
+        return null;
       }
 
       return {
-        login_key,
+        credential,
         project_key,
         endpoint: `${url.protocol}//${url.host}${url.pathname}`,
       };
     } catch (error) {
-      console.error('LaraBug: Invalid DSN format. Expected: https://login_key:project_key@host/path', error);
+      warn('[LaraBug] Ignoring an unparseable DSN. Expected: https://key:project_key@host/path', error);
       return null;
     }
   }
@@ -225,6 +341,16 @@ export class BaseLaraBugClient implements LaraBugClient {
     return { ...this.options };
   }
 
+  /** Whether this client will actually report anything. `getStatus()` says why not. */
+  isActive(): boolean {
+    return this.status.active;
+  }
+
+  /** Whether this client is reporting, and why not when it isn't. */
+  getStatus(): LaraBugClientStatus {
+    return { ...this.status };
+  }
+
   /**
    * Build an error event from an exception
    */
@@ -254,8 +380,11 @@ export class BaseLaraBugClient implements LaraBugClient {
 
   /**
    * Capture current request information
+   *
+   * Protected, not private: @larabug/browser overrides it, and private on both
+   * let the subclass shadow this at runtime while TypeScript saw no relation.
    */
-  private captureRequestInfo(): RequestInfo | undefined {
+  protected captureRequestInfo(): RequestInfo | undefined {
     if (typeof window === 'undefined') {
       return undefined;
     }
@@ -322,7 +451,7 @@ export class BaseLaraBugClient implements LaraBugClient {
    * Check if we should send this event
    */
   private shouldSend(): boolean {
-    if (!this.options.enabled) {
+    if (!this.status.active) {
       return false;
     }
 
@@ -398,10 +527,11 @@ export class BaseLaraBugClient implements LaraBugClient {
 
     const url = `${this.options.endpoint}`;
 
-    // Wrap event with project key and type (matching PHP SDK format)
+    // Wrap event with project key and type (matching PHP SDK format). An ingest
+    // key already names the project server-side, so the field is omitted then.
     const payload = JSON.stringify({
       type: 'javascript_error',
-      project: this.options.project_key,
+      ...(this.options.project_key ? { project: this.options.project_key } : {}),
       ...processedEvent,
     });
 
@@ -409,6 +539,28 @@ export class BaseLaraBugClient implements LaraBugClient {
     // the caller's stack unwinds immediately — the retry loop happens in
     // the background and can't block rendering.
     void this.sendViaFetch(url, payload);
+  }
+
+  /**
+   * Credentials and headers for an ingest request. Authorization is sent only
+   * when there is a login key, because `Bearer undefined` is worse than no
+   * header, and caller-supplied headers win over both credentials.
+   */
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    if (this.options.ingest_key) {
+      headers['X-LaraBug-Ingest-Key'] = this.options.ingest_key;
+    }
+
+    if (this.options.login_key) {
+      headers['Authorization'] = `Bearer ${this.options.login_key}`;
+    }
+
+    return { ...headers, ...this.options.transport.headers };
   }
 
   /**
@@ -424,12 +576,7 @@ export class BaseLaraBugClient implements LaraBugClient {
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${this.options.login_key}`,
-          ...this.options.transport.headers,
-        },
+        headers: this.buildHeaders(),
         body: payload,
         keepalive: true,
       });
