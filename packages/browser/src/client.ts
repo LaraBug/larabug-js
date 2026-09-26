@@ -7,17 +7,35 @@ export class BrowserClient extends BaseLaraBugClient {
   private installed = false;
   private breadcrumbFilter: DataFilter;
 
-  constructor(options: LaraBugOptions) {
+  /**
+   * Cannot throw, for any input. This client is loaded before the code it
+   * watches, so anything that escapes here escapes at the top level of the
+   * host's bundle and takes every module after it down with it.
+   */
+  constructor(options: LaraBugOptions = {}) {
     super(options);
-    // A separate DataFilter instance for breadcrumbs. Same default blacklist
-    // as the core filter, but applied *before* breadcrumbs are pushed into
-    // the buffer — so even if the SDK is later reconfigured, the breadcrumbs
-    // already in memory are safe.
-    this.breadcrumbFilter = new DataFilter({
-      blacklist: options.blacklist,
-      urlBlacklist: options.urlBlacklist,
-    });
+    this.breadcrumbFilter = this.createBreadcrumbFilter(options);
     this.install();
+  }
+
+  /**
+   * A separate DataFilter instance for breadcrumbs. Same default blacklist as
+   * the core filter, but applied *before* breadcrumbs are pushed into the
+   * buffer — so even if the SDK is later reconfigured, the breadcrumbs already
+   * in memory are safe.
+   *
+   * Falls back to the default filter if the caller's additions can't be read.
+   * That still carries the whole default blacklist; it just misses the extras.
+   */
+  private createBreadcrumbFilter(options: LaraBugOptions): DataFilter {
+    try {
+      return new DataFilter({
+        blacklist: options?.blacklist,
+        urlBlacklist: options?.urlBlacklist,
+      });
+    } catch {
+      return new DataFilter();
+    }
   }
 
   /**
@@ -28,14 +46,42 @@ export class BrowserClient extends BaseLaraBugClient {
       return;
     }
 
-    this.installGlobalErrorHandler();
-    this.installUnhandledRejectionHandler();
-    this.instrumentConsole();
-    this.instrumentFetch();
-    this.instrumentXHR();
-    this.captureNavigation();
+    // An inert client will never send anything, so it has no business patching
+    // console, fetch and XHR. A misconfigured SDK leaves the page as it found
+    // it. See BaseLaraBugClient#getStatus for why a client ends up inert.
+    if (!this.isActive()) {
+      return;
+    }
+
+    // Imported into a server-side render, or any other host without a DOM.
+    // Nothing to instrument; capture still works through the core client.
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    this.safely('the global error handler', () => this.installGlobalErrorHandler());
+    this.safely('unhandled promise rejections', () => this.installUnhandledRejectionHandler());
+    this.safely('console', () => this.instrumentConsole());
+    this.safely('fetch', () => this.instrumentFetch());
+    this.safely('XMLHttpRequest', () => this.instrumentXHR());
+    this.safely('navigation', () => this.captureNavigation());
 
     this.installed = true;
+  }
+
+  /**
+   * Install one piece of instrumentation. A step that fails costs us that step
+   * and nothing else: the other steps stay installed, the client stays up, and
+   * the exception never reaches the page.
+   */
+  private safely(step: string, install: () => void): void {
+    try {
+      install();
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(`[LaraBug] Could not instrument ${step}.`, error);
+      }
+    }
   }
 
   /**
@@ -137,7 +183,8 @@ export class BrowserClient extends BaseLaraBugClient {
 
     window.fetch = async (...args: Parameters<typeof fetch>) => {
       const [resource, options] = args;
-      const rawUrl = typeof resource === 'string' ? resource : resource.url;
+      const rawUrl =
+        typeof resource === 'string' ? resource : resource instanceof URL ? resource.href : resource.url;
       const url = filter.filterUrl(rawUrl);
       const method = options?.method || 'GET';
 
@@ -184,8 +231,8 @@ export class BrowserClient extends BaseLaraBugClient {
    * Instrument XMLHttpRequest
    */
   private instrumentXHR(): void {
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSend = XMLHttpRequest.prototype.send;
+    const originalOpen = XMLHttpRequest.prototype.open as (...args: any[]) => void;
+    const originalSend = XMLHttpRequest.prototype.send as (...args: any[]) => void;
     const filter = this.breadcrumbFilter;
 
     XMLHttpRequest.prototype.open = function (
@@ -266,7 +313,7 @@ export class BrowserClient extends BaseLaraBugClient {
 
     // Capture navigation events
     if (window.history && window.history.pushState) {
-      const originalPushState = window.history.pushState;
+      const originalPushState = window.history.pushState as (...args: any[]) => void;
       window.history.pushState = (...args: any[]) => {
         const from = window.location.href;
         const result = originalPushState.apply(window.history, args);
@@ -305,7 +352,7 @@ export class BrowserClient extends BaseLaraBugClient {
   /**
    * Capture current request information
    */
-  private captureRequestInfo(): RequestInfo {
+  protected captureRequestInfo(): RequestInfo {
     return {
       url: window.location.href,
       method: 'GET',

@@ -29,7 +29,27 @@ npm install @larabug/vue
 npm install @larabug/inertia
 ```
 
-All packages require an `LB_DSN` (or separate `login_key` + `project_key`) from your project at [larabug.com](https://www.larabug.com).
+## Getting started
+
+```js
+import * as LaraBug from '@larabug/browser';
+
+LaraBug.init({
+  ingest_key: 'lbi_...', // from your project settings at larabug.com
+  environment: 'production',
+});
+```
+
+The ingest key is write only and scoped to a single project, which makes it the only credential that is safe to put in a page your visitors can read. The `dsn` in your project settings carries the same key, so you can pass that instead. The older account `login_key` together with `project_key` keeps working for existing installs, but it is account wide and does not belong in browser JavaScript.
+
+Initialising never throws. A client without usable credentials warns once, stays inert and leaves the rest of the page running, which matters because the SDK loads before the code it watches. Ask the client when you need to know:
+
+```js
+const client = LaraBug.init({ ingest_key: window.LB_INGEST_KEY });
+
+client.isActive();  // false when nothing will be reported
+client.getStatus(); // { active: false, reason: 'no usable credentials. ...' }
+```
 
 ## Documentation
 

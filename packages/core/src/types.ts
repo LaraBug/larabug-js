@@ -1,8 +1,32 @@
 /**
  * Configuration options for LaraBug client
+ *
+ * Every field is optional and every field is validated at construction time.
+ * Options reach the SDK from places that are not TypeScript (a Blade template,
+ * a `.env` file read by a server-side package, a hand-written script tag), so
+ * a missing or wrong-typed value turns reporting off and says so once. It
+ * never throws: see `BaseLaraBugClient`.
  */
 export interface LaraBugOptions {
-  /** Your LaraBug login key (from profile) */
+  /**
+   * Your project's ingest key, from the project's settings (prefixed `lbi_`).
+   *
+   * Write-only and scoped to the one project, which makes it the only
+   * credential that is safe to render into a page every visitor can read.
+   * Sufficient on its own: it identifies the project, so `project_key` is not
+   * needed alongside it.
+   */
+  ingest_key?: string;
+
+  /**
+   * Your LaraBug login key (the account api_token, from your profile).
+   *
+   * Account-wide, so it must never appear in browser JavaScript. Kept for the
+   * SDKs already deployed with it, and only usable together with
+   * `project_key`. Prefer `ingest_key` for anything a browser loads.
+   *
+   * @deprecated Use `ingest_key` (or a `dsn`, which now carries one).
+   */
   login_key?: string;
 
   /** Your LaraBug project key (from project settings) */
@@ -11,7 +35,14 @@ export interface LaraBugOptions {
   /** API endpoint URL */
   endpoint?: string;
 
-  /** DSN string (format: https://login_key:project_key@host/path) - overrides individual keys */
+  /**
+   * DSN string (format: https://key:project_key@host/path) - overrides
+   * individual keys.
+   *
+   * The first field is a project ingest key on a DSN issued today, and an
+   * account login key on an older one. The SDK tells them apart by the `lbi_`
+   * prefix, so the same option accepts either.
+   */
   dsn?: string;
 
   /** Release version for tracking deployments */
@@ -30,7 +61,7 @@ export interface LaraBugOptions {
   maxBreadcrumbs?: number;
 
   /** Custom user context */
-  user?: User;
+  user?: User | null;
 
   /** Additional context data */
   context?: Record<string, any>;
@@ -70,6 +101,23 @@ export interface LaraBugOptions {
    * duplicate and suppressed. Defaults to 5000.
    */
   dedupeWindowMs?: number;
+}
+
+/**
+ * Whether a client is reporting, and why it isn't when it isn't.
+ *
+ * A client that cannot report is inert rather than broken, so nothing else
+ * signals the problem. This is how code asks.
+ */
+export interface LaraBugClientStatus {
+  /** True when the client has a usable credential and reporting is enabled. */
+  active: boolean;
+
+  /**
+   * Why the client is inert, in a sentence fit to show a developer. Null
+   * while `active` is true.
+   */
+  reason: string | null;
 }
 
 /**
@@ -178,4 +226,10 @@ export interface LaraBugClient {
 
   /** Get current options */
   getOptions(): LaraBugOptions;
+
+  /** Whether this client will actually report anything */
+  isActive(): boolean;
+
+  /** Whether this client is reporting, and why not when it isn't */
+  getStatus(): LaraBugClientStatus;
 }
