@@ -5,12 +5,19 @@ import {
   ErrorEvent,
   Breadcrumb,
   User,
-  StackFrame,
   RequestInfo,
   TransportOptions,
 } from './types';
 import { DataFilter } from './data-filter';
 import { RateLimiter } from './rate-limiter';
+import { parseStackTrace } from './stack-parser';
+
+/**
+ * Set at build time by @larabug/vite (or any bundler's define), or assigned on
+ * `window` before the SDK loads. Read through `typeof` so that a page without
+ * it does not throw a ReferenceError.
+ */
+declare const __LARABUG_RELEASE__: unknown;
 
 /**
  * Re-entry guard shared across all client instances. If any part of the
@@ -41,6 +48,21 @@ function asObject<T>(value: unknown, fallback: T): T {
 
 function asStringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+}
+
+/** The release the build injected, or an empty string when there is none. */
+export function injectedRelease(): string {
+  try {
+    if (typeof __LARABUG_RELEASE__ === 'string') {
+      return __LARABUG_RELEASE__;
+    }
+  } catch {
+    // A define that replaced the identifier with something unreadable.
+  }
+
+  const global = typeof globalThis !== 'undefined' ? (globalThis as Record<string, unknown>) : {};
+
+  return typeof global.__LARABUG_RELEASE__ === 'string' ? global.__LARABUG_RELEASE__ : '';
 }
 
 function warn(message: string, detail?: unknown): void {
@@ -147,7 +169,7 @@ export class BaseLaraBugClient implements LaraBugClient {
       project_key,
       endpoint,
       dsn,
-      release: asText(given.release),
+      release: asText(given.release) || injectedRelease(),
       environment: asText(given.environment) || 'production',
       enabled: given.enabled !== false,
       sampleRate: asNumber(given.sampleRate, 1.0),
@@ -355,7 +377,7 @@ export class BaseLaraBugClient implements LaraBugClient {
    * Build an error event from an exception
    */
   private buildErrorEvent(error: Error, context?: Record<string, any>): ErrorEvent {
-    const stacktrace = this.parseStackTrace(error);
+    const stacktrace = parseStackTrace(error.stack);
 
     return {
       message: error.message || 'Unknown error',
@@ -394,57 +416,6 @@ export class BaseLaraBugClient implements LaraBugClient {
       method: 'GET', // Browser context is always GET for page loads
       query_string: window.location.search,
     };
-  }
-
-  /**
-   * Parse error stack trace
-   */
-  private parseStackTrace(error: Error): StackFrame[] {
-    if (!error.stack) {
-      return [];
-    }
-
-    const frames: StackFrame[] = [];
-    const lines = error.stack.split('\n').slice(1); // Skip the first line (error message)
-
-    for (const line of lines) {
-      const frame = this.parseStackLine(line);
-      if (frame) {
-        frames.push(frame);
-      }
-    }
-
-    return frames;
-  }
-
-  /**
-   * Parse a single stack trace line
-   */
-  private parseStackLine(line: string): StackFrame | null {
-    // Match patterns like:
-    // at functionName (filename:line:column)
-    // at filename:line:column
-    const chromePattern = /^\s*at\s+(?:(.+?)\s+\()?(.+?):(\d+):(\d+)\)?$/;
-    const match = line.match(chromePattern);
-
-    if (match) {
-      return {
-        function: match[1] || '<anonymous>',
-        filename: match[2],
-        lineno: parseInt(match[3], 10),
-        colno: parseInt(match[4], 10),
-        in_app: !this.isThirdPartyCode(match[2]),
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * Check if code is from third-party library
-   */
-  private isThirdPartyCode(filename: string): boolean {
-    return filename.includes('node_modules') || filename.includes('vendor');
   }
 
   /**

@@ -75,11 +75,17 @@ export class BrowserClient extends BaseLaraBugClient {
    */
   private installGlobalErrorHandler(): void {
     window.addEventListener('error', (event: ErrorEvent) => {
-      // Ignore if error is from a script
-      if (event.filename) {
+      // The thrown error carries the whole stack; the event's own location is
+      // only its top frame, so it is the fallback for errors without a stack
+      // (a thrown string, or a cross-origin script).
+      if (event.error instanceof Error && event.error.stack) {
+        this.captureException(event.error, {
+          handled: false,
+          mechanism: 'onerror',
+        });
+      } else if (event.filename) {
         const error = new Error(event.message);
         error.name = 'Error';
-        // @ts-ignore
         error.stack = `Error: ${event.message}\n    at ${event.filename}:${event.lineno}:${event.colno}`;
 
         this.captureException(error, {
@@ -87,10 +93,13 @@ export class BrowserClient extends BaseLaraBugClient {
           mechanism: 'onerror',
         });
       } else if (event.error) {
-        this.captureException(event.error, {
-          handled: false,
-          mechanism: 'onerror',
-        });
+        this.captureException(
+          event.error instanceof Error ? event.error : new Error(String(event.error)),
+          {
+            handled: false,
+            mechanism: 'onerror',
+          }
+        );
       }
     });
   }

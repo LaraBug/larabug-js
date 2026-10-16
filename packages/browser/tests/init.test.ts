@@ -175,3 +175,42 @@ describe('instrumentation that cannot be installed', () => {
     );
   });
 });
+
+describe('a page error', () => {
+  const bundle = 'https://app.test/build/assets/app-D4wpJuT4.js';
+
+  function sentBody(): Record<string, any> {
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    return JSON.parse(fetchMock.mock.calls[0][1].body as string);
+  }
+
+  it('is reported with the whole stack of the thrown error', () => {
+    init({ ingest_key: 'lbi_abc123', release: 'abc123' });
+
+    const error = new TypeError('x is undefined');
+    error.stack = `TypeError: x is undefined\n    at save (${bundle}:1:2345)\n    at submit (${bundle}:1:678)`;
+
+    window.dispatchEvent(
+      new ErrorEvent('error', { message: error.message, filename: bundle, lineno: 1, colno: 2345, error })
+    );
+
+    const body = sentBody();
+    expect(body.release).toBe('abc123');
+    expect(body.exception.type).toBe('TypeError');
+    expect(body.exception.stacktrace).toEqual([
+      { function: 'save', filename: bundle, lineno: 1, colno: 2345, in_app: true },
+      { function: 'submit', filename: bundle, lineno: 1, colno: 678, in_app: true },
+    ]);
+  });
+
+  it('falls back to the location on the event when the error has no stack', () => {
+    init({ ingest_key: 'lbi_abc123' });
+
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Script error', filename: bundle, lineno: 1, colno: 99 }));
+
+    expect(sentBody().exception.stacktrace).toEqual([
+      { function: '<anonymous>', filename: bundle, lineno: 1, colno: 99, in_app: true },
+    ]);
+  });
+});
