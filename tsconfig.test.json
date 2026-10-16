@@ -10,7 +10,8 @@
     "baseUrl": ".",
     "paths": {
       "@larabug/core": ["packages/core/src"],
-      "@larabug/browser": ["packages/browser/src"]
+      "@larabug/browser": ["packages/browser/src"],
+      "@larabug/sourcemaps": ["packages/sourcemaps/src"]
     }
   }
 }

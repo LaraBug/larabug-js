@@ -6,7 +6,7 @@ describe('V8 stacks (Chrome, Edge, Opera)', () => {
   it('keeps the full URL, the line and the column of every frame', () => {
     const frames = parseStackTrace(
       [
-        'TypeError: Cannot read properties of undefined (reading \'id\')',
+        "TypeError: Cannot read properties of undefined (reading 'id')",
         `    at Proxy.save (${bundle}:1:23456)`,
         `    at ${bundle}:1:789`,
         `    at async Promise.all (index 0)`,
@@ -23,9 +23,15 @@ describe('V8 stacks (Chrome, Edge, Opera)', () => {
   });
 
   it('keeps a port as part of the URL', () => {
-    const [frame] = parseStackTrace('Error: x\n    at run (http://localhost:5173/resources/js/app.js:10:20)');
+    const [frame] = parseStackTrace(
+      'Error: x\n    at run (http://localhost:5173/resources/js/app.js:10:20)'
+    );
 
-    expect(frame).toMatchObject({ filename: 'http://localhost:5173/resources/js/app.js', lineno: 10, colno: 20 });
+    expect(frame).toMatchObject({
+      filename: 'http://localhost:5173/resources/js/app.js',
+      lineno: 10,
+      colno: 20,
+    });
   });
 
   it('points an eval frame at the code that called eval', () => {
@@ -37,7 +43,9 @@ describe('V8 stacks (Chrome, Edge, Opera)', () => {
   });
 
   it('marks dependencies as not in the app', () => {
-    const [frame] = parseStackTrace('Error: x\n    at f (https://app.test/node_modules/.vite/deps/vue.js:1:2)');
+    const [frame] = parseStackTrace(
+      'Error: x\n    at f (https://app.test/node_modules/.vite/deps/vue.js:1:2)'
+    );
 
     expect(frame.in_app).toBe(false);
   });
@@ -50,7 +58,12 @@ describe('V8 stacks (Chrome, Edge, Opera)', () => {
 describe('SpiderMonkey stacks (Firefox)', () => {
   it('keeps the top frame, which has no message line above it', () => {
     const frames = parseStackTrace(
-      [`save@${bundle}:1:23456`, `@${bundle}:1:789`, `promise callback*load@${bundle}:2:42`, ''].join('\n')
+      [
+        `save@${bundle}:1:23456`,
+        `@${bundle}:1:789`,
+        `promise callback*load@${bundle}:2:42`,
+        '',
+      ].join('\n')
     );
 
     expect(frames).toEqual([
@@ -70,7 +83,12 @@ describe('SpiderMonkey stacks (Firefox)', () => {
 describe('JavaScriptCore stacks (Safari)', () => {
   it('keeps URLs and columns, and native frames without either', () => {
     const frames = parseStackTrace(
-      [`save@${bundle}:1:23456`, 'forEach@[native code]', `global code@${bundle}:1:5`, `${bundle}:1:9`].join('\n')
+      [
+        `save@${bundle}:1:23456`,
+        'forEach@[native code]',
+        `global code@${bundle}:1:5`,
+        `${bundle}:1:9`,
+      ].join('\n')
     );
 
     expect(frames).toEqual([

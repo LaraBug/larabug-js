@@ -1,0 +1,58 @@
+{
+  "name": "@larabug/sourcemaps",
+  "version": "0.1.0",
+  "description": "Upload source maps to LaraBug from any bundler, from the command line or from Node",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "larabug-sourcemaps": "dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "build:watch": "rollup -c -w",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LaraBug/larabug-js",
+    "directory": "packages/sourcemaps"
+  },
+  "keywords": [
+    "larabug",
+    "error-tracking",
+    "sourcemaps",
+    "source-maps",
+    "webpack",
+    "cli"
+  ],
+  "author": "LaraBug",
+  "license": "MIT",
+  "dependencies": {
+    "picomatch": "^4.0.2"
+  },
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/picomatch": "^4.0.3",
+    "rollup": "^4.9.6",
+    "rollup-plugin-dts": "^6.1.0",
+    "typescript": "^5.3.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

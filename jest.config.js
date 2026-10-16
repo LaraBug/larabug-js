@@ -5,6 +5,7 @@ module.exports = {
   moduleNameMapper: {
     '^@larabug/core$': '<rootDir>/packages/core/src',
     '^@larabug/browser$': '<rootDir>/packages/browser/src',
+    '^@larabug/sourcemaps$': '<rootDir>/packages/sourcemaps/src',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.test.json' }],

@@ -20,7 +20,9 @@ afterEach(() => {
 
 describe('release', () => {
   it('goes out at the top level of an error event', () => {
-    new BaseLaraBugClient({ ingest_key: 'lbi_abc123', release: 'abc123' }).captureException(new Error('boom'));
+    new BaseLaraBugClient({ ingest_key: 'lbi_abc123', release: 'abc123' }).captureException(
+      new Error('boom')
+    );
 
     expect(sentBody().release).toBe('abc123');
   });
@@ -44,7 +46,9 @@ describe('release', () => {
   it('prefers the option over the injected release', () => {
     (globalThis as any).__LARABUG_RELEASE__ = 'from-the-build';
 
-    new BaseLaraBugClient({ ingest_key: 'lbi_abc123', release: 'explicit' }).captureException(new Error('boom'));
+    new BaseLaraBugClient({ ingest_key: 'lbi_abc123', release: 'explicit' }).captureException(
+      new Error('boom')
+    );
 
     expect(sentBody().release).toBe('explicit');
   });
