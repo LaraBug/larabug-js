@@ -18,13 +18,22 @@ const config = [
       { file: 'dist/index.js', format: 'cjs', sourcemap: true },
       { file: 'dist/index.mjs', format: 'esm', sourcemap: true },
     ],
-    plugins: [typescript({ tsconfig: './tsconfig.json', declaration: false, declarationMap: false })],
+    plugins: [
+      typescript({ tsconfig: './tsconfig.json', declaration: false, declarationMap: false }),
+    ],
   },
   {
     input: 'src/bin.ts',
     external,
     output: { file: 'dist/bin.js', format: 'cjs', banner: '#!/usr/bin/env node' },
-    plugins: [typescript({ tsconfig: './tsconfig.json', declaration: false, declarationMap: false, sourceMap: false })],
+    plugins: [
+      typescript({
+        tsconfig: './tsconfig.json',
+        declaration: false,
+        declarationMap: false,
+        sourceMap: false,
+      }),
+    ],
   },
   {
     input: 'src/index.ts',
