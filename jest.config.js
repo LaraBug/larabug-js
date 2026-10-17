@@ -11,7 +11,7 @@ module.exports = {
     // Vite and Inertia v3 ship their types behind package exports only, which needs node16
     // resolution, which ts-jest supports only with isolatedModules: these files
     // are transpiled without type checks, and `tsc -p packages/vite` checks them.
-    '^.+/packages/(vite|inertia)/.+\\.ts$': [
+    '^.+/packages/(vite|inertia|vue)/.+\\.ts$': [
       'ts-jest',
       { tsconfig: '<rootDir>/packages/vite/tsconfig.test.json' },
     ],
