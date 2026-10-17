@@ -10,6 +10,8 @@ Official JavaScript SDK for [larabug.com](https://www.larabug.com). Ships fronte
 [![@larabug/react](https://img.shields.io/npm/v/@larabug/react?label=%40larabug%2Freact)](https://www.npmjs.com/package/@larabug/react)
 [![@larabug/vue](https://img.shields.io/npm/v/@larabug/vue?label=%40larabug%2Fvue)](https://www.npmjs.com/package/@larabug/vue)
 [![@larabug/inertia](https://img.shields.io/npm/v/@larabug/inertia?label=%40larabug%2Finertia)](https://www.npmjs.com/package/@larabug/inertia)
+[![@larabug/vite](https://img.shields.io/npm/v/@larabug/vite?label=%40larabug%2Fvite)](https://www.npmjs.com/package/@larabug/vite)
+[![@larabug/sourcemaps](https://img.shields.io/npm/v/@larabug/sourcemaps?label=%40larabug%2Fsourcemaps)](https://www.npmjs.com/package/@larabug/sourcemaps)
 
 ## Installation
 
@@ -27,6 +29,12 @@ npm install @larabug/vue
 
 # Inertia.js (use alongside @larabug/vue or @larabug/react)
 npm install @larabug/inertia
+
+# Source maps, for Vite builds
+npm install --save-dev @larabug/vite
+
+# Source maps, for any other bundler
+npm install --save-dev @larabug/sourcemaps
 ```
 
 ## Getting started
@@ -50,6 +58,32 @@ const client = LaraBug.init({ ingest_key: window.LB_INGEST_KEY });
 client.isActive();  // false when nothing will be reported
 client.getStatus(); // { active: false, reason: 'no usable credentials. ...' }
 ```
+
+## Source maps
+
+Production bundles are minified, so a raw stack trace points at line 1, column 48213 of `app-D4wpJuT4.js`. Upload your source maps and LaraBug shows the original file, line and function instead.
+
+With Vite, add [`@larabug/vite`](packages/vite) to your config and set `LARABUG_KEY` in `.env`.
+
+```js
+// vite.config.js
+import laravel from 'laravel-vite-plugin';
+import larabug from '@larabug/vite';
+
+export default {
+  plugins: [laravel({ input: ['resources/js/app.js'] }), larabug()],
+};
+```
+
+Every `vite build` then uploads its maps under the current git commit, removes them from `public/build`, and puts the commit in your bundle. The SDK sends it as the `release` of every error, so LaraBug knows which maps belong to which error.
+
+For webpack, Laravel Mix or any other bundler, run the uploader from [`@larabug/sourcemaps`](packages/sourcemaps) after the build.
+
+```bash
+npx @larabug/sourcemaps upload --release "$(git rev-parse HEAD)" --dir public/js --url-prefix "~/js"
+```
+
+That README shows how to inject the release with webpack's `DefinePlugin`.
 
 ## Documentation
 

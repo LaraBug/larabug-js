@@ -1,5 +1,6 @@
 export * from './types';
 export * from './client';
+export { parseStackTrace, parseStackLine } from './stack-parser';
 export { DataFilter, DEFAULT_BLACKLIST, DEFAULT_URL_BLACKLIST, FILTERED } from './data-filter';
 export type { DataFilterOptions } from './data-filter';
 export { RateLimiter } from './rate-limiter';

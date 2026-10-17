@@ -29,7 +29,11 @@ export interface LaraBugOptions {
    */
   dsn?: string;
 
-  /** Release version for tracking deployments */
+  /**
+   * The build this code came from, matched against the source maps uploaded
+   * for it. Defaults to the release injected at build time by @larabug/vite
+   * (the `__LARABUG_RELEASE__` global), and to an empty string without one.
+   */
   release?: string;
 
   /** Environment name (e.g., production, staging) */
@@ -121,6 +125,7 @@ export interface Breadcrumb {
  * Stack frame information
  */
 export interface StackFrame {
+  /** The full URL of the script, as the browser loaded it */
   filename?: string;
   function?: string;
   lineno?: number;
