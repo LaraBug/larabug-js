@@ -13,7 +13,7 @@ let vueClient: BrowserClient | null = null;
  * Note: For full Vue integration (component info, lifecycle tracking),
  * use the LaraBugVuePlugin with your Vue app instance.
  */
-export function init(options: LaraBugOptions): BrowserClient {
+export function init(options: LaraBugOptions = {}): BrowserClient {
   vueClient = browserInit(options);
   
   // Set framework tag globally for all errors

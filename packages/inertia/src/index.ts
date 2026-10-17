@@ -12,7 +12,7 @@ let inertiaClient: BrowserClient | null = null;
  * Note: For full Inertia integration (navigation tracking, Laravel context),
  * use the createInertiaLaraBugPlugin() with your Inertia router.
  */
-export function init(options: LaraBugOptions): BrowserClient {
+export function init(options: LaraBugOptions = {}): BrowserClient {
   inertiaClient = browserInit(options);
   
   // Set framework tag globally for all errors

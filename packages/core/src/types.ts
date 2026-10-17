@@ -2,7 +2,19 @@
  * Configuration options for LaraBug client
  */
 export interface LaraBugOptions {
-  /** Your LaraBug login key (from profile) */
+  /**
+   * Your project's ingest key, from its settings (prefixed `lbi_`). Write-only
+   * and scoped to one project, so it is safe to put in a page your visitors can
+   * read. Sufficient on its own: it needs no `project_key` beside it.
+   */
+  ingest_key?: string;
+
+  /**
+   * Your LaraBug login key (the account api_token, from your profile). Account
+   * wide, so it does not belong in browser JavaScript. Requires `project_key`.
+   *
+   * @deprecated Use `ingest_key` (or a `dsn`, which now carries one).
+   */
   login_key?: string;
 
   /** Your LaraBug project key (from project settings) */
@@ -11,10 +23,17 @@ export interface LaraBugOptions {
   /** API endpoint URL */
   endpoint?: string;
 
-  /** DSN string (format: https://login_key:project_key@host/path) - overrides individual keys */
+  /**
+   * DSN string (format: https://key:project_key@host/path) - overrides
+   * individual keys. The first field may be an ingest key or a login key.
+   */
   dsn?: string;
 
-  /** Release version for tracking deployments */
+  /**
+   * The build this code came from, matched against the source maps uploaded
+   * for it. Defaults to the release injected at build time by @larabug/vite
+   * (the `__LARABUG_RELEASE__` global), and to an empty string without one.
+   */
   release?: string;
 
   /** Environment name (e.g., production, staging) */
@@ -30,7 +49,7 @@ export interface LaraBugOptions {
   maxBreadcrumbs?: number;
 
   /** Custom user context */
-  user?: User;
+  user?: User | null;
 
   /** Additional context data */
   context?: Record<string, any>;
@@ -72,6 +91,14 @@ export interface LaraBugOptions {
   dedupeWindowMs?: number;
 }
 
+/** Whether a client is reporting, and why it isn't when it isn't. */
+export interface LaraBugClientStatus {
+  active: boolean;
+
+  /** Why the client is inert. Null while `active` is true. */
+  reason: string | null;
+}
+
 /**
  * User information
  */
@@ -98,6 +125,7 @@ export interface Breadcrumb {
  * Stack frame information
  */
 export interface StackFrame {
+  /** The full URL of the script, as the browser loaded it */
   filename?: string;
   function?: string;
   lineno?: number;
@@ -178,4 +206,10 @@ export interface LaraBugClient {
 
   /** Get current options */
   getOptions(): LaraBugOptions;
+
+  /** Whether this client will actually report anything */
+  isActive(): boolean;
+
+  /** Whether this client is reporting, and why not when it isn't */
+  getStatus(): LaraBugClientStatus;
 }

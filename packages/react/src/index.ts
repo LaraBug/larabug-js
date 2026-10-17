@@ -10,7 +10,7 @@ let reactClient: BrowserClient | null = null;
  * Initialize LaraBug for React
  * Automatically sets framework tag to 'react'
  */
-export function init(options: LaraBugOptions): BrowserClient {
+export function init(options: LaraBugOptions = {}): BrowserClient {
   reactClient = browserInit(options);
   
   // Set framework tag globally for all errors

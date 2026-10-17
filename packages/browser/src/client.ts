@@ -7,17 +7,28 @@ export class BrowserClient extends BaseLaraBugClient {
   private installed = false;
   private breadcrumbFilter: DataFilter;
 
-  constructor(options: LaraBugOptions) {
+  /** Cannot throw, for any input. See BaseLaraBugClient. */
+  constructor(options: LaraBugOptions = {}) {
     super(options);
-    // A separate DataFilter instance for breadcrumbs. Same default blacklist
-    // as the core filter, but applied *before* breadcrumbs are pushed into
-    // the buffer — so even if the SDK is later reconfigured, the breadcrumbs
-    // already in memory are safe.
-    this.breadcrumbFilter = new DataFilter({
-      blacklist: options.blacklist,
-      urlBlacklist: options.urlBlacklist,
-    });
+    this.breadcrumbFilter = this.createBreadcrumbFilter(options);
     this.install();
+  }
+
+  /**
+   * A separate DataFilter instance for breadcrumbs. Same default blacklist as
+   * the core filter, but applied *before* breadcrumbs are pushed into the
+   * buffer — so even if the SDK is later reconfigured, the breadcrumbs already
+   * in memory are safe.
+   */
+  private createBreadcrumbFilter(options: LaraBugOptions): DataFilter {
+    try {
+      return new DataFilter({
+        blacklist: options?.blacklist,
+        urlBlacklist: options?.urlBlacklist,
+      });
+    } catch {
+      return new DataFilter();
+    }
   }
 
   /**
@@ -28,14 +39,35 @@ export class BrowserClient extends BaseLaraBugClient {
       return;
     }
 
-    this.installGlobalErrorHandler();
-    this.installUnhandledRejectionHandler();
-    this.instrumentConsole();
-    this.instrumentFetch();
-    this.instrumentXHR();
-    this.captureNavigation();
+    // Nothing is ever sent from an inert client, so patching console, fetch and
+    // XHR would cost the host app its own wrappers and buy nothing.
+    if (!this.isActive()) {
+      return;
+    }
+
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    this.safely('the global error handler', () => this.installGlobalErrorHandler());
+    this.safely('unhandled promise rejections', () => this.installUnhandledRejectionHandler());
+    this.safely('console', () => this.instrumentConsole());
+    this.safely('fetch', () => this.instrumentFetch());
+    this.safely('XMLHttpRequest', () => this.instrumentXHR());
+    this.safely('navigation', () => this.captureNavigation());
 
     this.installed = true;
+  }
+
+  /** Install one piece of instrumentation. A step that fails costs only itself. */
+  private safely(step: string, install: () => void): void {
+    try {
+      install();
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(`[LaraBug] Could not instrument ${step}.`, error);
+      }
+    }
   }
 
   /**
@@ -43,11 +75,17 @@ export class BrowserClient extends BaseLaraBugClient {
    */
   private installGlobalErrorHandler(): void {
     window.addEventListener('error', (event: ErrorEvent) => {
-      // Ignore if error is from a script
-      if (event.filename) {
+      // The thrown error carries the whole stack; the event's own location is
+      // only its top frame, so it is the fallback for errors without a stack
+      // (a thrown string, or a cross-origin script).
+      if (event.error instanceof Error && event.error.stack) {
+        this.captureException(event.error, {
+          handled: false,
+          mechanism: 'onerror',
+        });
+      } else if (event.filename) {
         const error = new Error(event.message);
         error.name = 'Error';
-        // @ts-ignore
         error.stack = `Error: ${event.message}\n    at ${event.filename}:${event.lineno}:${event.colno}`;
 
         this.captureException(error, {
@@ -55,10 +93,13 @@ export class BrowserClient extends BaseLaraBugClient {
           mechanism: 'onerror',
         });
       } else if (event.error) {
-        this.captureException(event.error, {
-          handled: false,
-          mechanism: 'onerror',
-        });
+        this.captureException(
+          event.error instanceof Error ? event.error : new Error(String(event.error)),
+          {
+            handled: false,
+            mechanism: 'onerror',
+          }
+        );
       }
     });
   }
@@ -137,7 +178,8 @@ export class BrowserClient extends BaseLaraBugClient {
 
     window.fetch = async (...args: Parameters<typeof fetch>) => {
       const [resource, options] = args;
-      const rawUrl = typeof resource === 'string' ? resource : resource.url;
+      const rawUrl =
+        typeof resource === 'string' ? resource : resource instanceof URL ? resource.href : resource.url;
       const url = filter.filterUrl(rawUrl);
       const method = options?.method || 'GET';
 
@@ -184,8 +226,8 @@ export class BrowserClient extends BaseLaraBugClient {
    * Instrument XMLHttpRequest
    */
   private instrumentXHR(): void {
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSend = XMLHttpRequest.prototype.send;
+    const originalOpen = XMLHttpRequest.prototype.open as (...args: any[]) => void;
+    const originalSend = XMLHttpRequest.prototype.send as (...args: any[]) => void;
     const filter = this.breadcrumbFilter;
 
     XMLHttpRequest.prototype.open = function (
@@ -266,7 +308,7 @@ export class BrowserClient extends BaseLaraBugClient {
 
     // Capture navigation events
     if (window.history && window.history.pushState) {
-      const originalPushState = window.history.pushState;
+      const originalPushState = window.history.pushState as (...args: any[]) => void;
       window.history.pushState = (...args: any[]) => {
         const from = window.location.href;
         const result = originalPushState.apply(window.history, args);
@@ -305,7 +347,7 @@ export class BrowserClient extends BaseLaraBugClient {
   /**
    * Capture current request information
    */
-  private captureRequestInfo(): RequestInfo {
+  protected captureRequestInfo(): RequestInfo {
     return {
       url: window.location.href,
       method: 'GET',

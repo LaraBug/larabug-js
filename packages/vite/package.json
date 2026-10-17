@@ -1,0 +1,59 @@
+{
+  "name": "@larabug/vite",
+  "version": "0.1.0",
+  "description": "Vite plugin that uploads source maps to LaraBug and stamps every error with the build's release",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "build:watch": "rollup -c -w",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LaraBug/larabug-js",
+    "directory": "packages/vite"
+  },
+  "keywords": [
+    "larabug",
+    "error-tracking",
+    "vite",
+    "vite-plugin",
+    "sourcemaps",
+    "laravel"
+  ],
+  "author": "LaraBug",
+  "license": "MIT",
+  "peerDependencies": {
+    "vite": ">=4.0.0"
+  },
+  "dependencies": {
+    "@larabug/sourcemaps": "^0.1.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^11.1.6",
+    "laravel-vite-plugin": "^3.2.0",
+    "rollup": "^4.9.6",
+    "rollup-plugin-dts": "^6.1.0",
+    "typescript": "^5.3.3",
+    "vite": "^8.3.4"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
