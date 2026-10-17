@@ -347,7 +347,12 @@ export class BrowserClient extends BaseLaraBugClient {
   /**
    * Capture current request information
    */
-  protected captureRequestInfo(): RequestInfo {
+  protected captureRequestInfo(): RequestInfo | undefined {
+    // Also called outside a browser, such as during a server-side render.
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
     return {
       url: window.location.href,
       method: 'GET',

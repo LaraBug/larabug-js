@@ -9,7 +9,11 @@ export interface VueLaraBugOptions extends LaraBugOptions {
   /** Track lifecycle hooks as breadcrumbs */
   trackLifecycleHooks?: boolean;
   
-  /** Custom error handler */
+  /**
+   * Print captured errors to the console, as Vue does when it has no error
+   * handler. Defaults to true. An errorHandler the app set before the plugin
+   * is called instead, and decides for itself.
+   */
   logErrors?: boolean;
 }
 
@@ -81,14 +85,13 @@ export const LaraBugVuePlugin: Plugin = {
       // Capture error
       client.captureException(error, context);
 
-      // Call original error handler
+      // Setting errorHandler stops Vue printing the error itself, in
+      // production too. An app's own handler decides for itself; without one
+      // the error is printed the way Vue would have.
       if (originalErrorHandler) {
         originalErrorHandler(err, instance, info);
-      }
-
-      // Log to console in development
-      if (logErrors && process.env.NODE_ENV !== 'production') {
-        console.error('[LaraBug] Error captured:', error);
+      } else if (logErrors) {
+        console.error(err);
       }
     };
 

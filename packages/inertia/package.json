@@ -1,6 +1,6 @@
 {
   "name": "@larabug/inertia",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "LaraBug SDK for Inertia.js with request tracking",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
@@ -34,7 +34,7 @@
     "@larabug/core": "^0.2.0"
   },
   "devDependencies": {
-    "@inertiajs/core": "^1.0.0",
+    "@inertiajs/core": "^3.9.1",
     "@rollup/plugin-typescript": "^11.1.6",
     "rollup": "^4.9.6",
     "rollup-plugin-dts": "^6.1.0",
