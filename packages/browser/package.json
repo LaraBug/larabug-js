@@ -27,7 +27,7 @@
   "author": "LaraBug",
   "license": "MIT",
   "dependencies": {
-    "@larabug/core": "^0.2.0"
+    "@larabug/core": "^0.3.0"
   },
   "devDependencies": {
     "@rollup/plugin-typescript": "^11.1.6",

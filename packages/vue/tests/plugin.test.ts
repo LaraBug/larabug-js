@@ -36,6 +36,23 @@ describe('the Vue error handler', () => {
     print.mockRestore();
   });
 
+  it('reports nothing for a crawler, and still prints the error', () => {
+    jest.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+    );
+    init({ ingest_key: 'lbi_abc123' });
+    const app = fakeApp();
+    (LaraBugVuePlugin.install as (app: App) => void)(app);
+    const print = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = new Error('render broke');
+
+    app.config.errorHandler?.(error, null, 'render function');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(print).toHaveBeenCalledWith(error);
+    jest.restoreAllMocks();
+  });
+
   it('leaves printing to a handler the app already had', () => {
     const own = jest.fn();
     const app = fakeApp(own);

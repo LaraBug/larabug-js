@@ -42,6 +42,27 @@ export interface LaraBugOptions {
   /** Whether to report errors in the current environment */
   enabled?: boolean;
 
+  /**
+   * Report nothing when `navigator.userAgent` is a known crawler or headless
+   * renderer (Googlebot, bingbot, HeadlessChrome, Lighthouse and others; see
+   * `KNOWN_CRAWLERS`). The client is then inert, as with `enabled: false`, and
+   * installs no handlers. Defaults to true.
+   */
+  ignoreBots?: boolean;
+
+  /**
+   * Report nothing when `navigator.webdriver` is true, which browsers set when
+   * automation (Selenium, Puppeteer, Playwright) drives them. Defaults to true.
+   */
+  ignoreWebdriver?: boolean;
+
+  /**
+   * More user agents to report nothing for. A string matches anywhere in the
+   * user agent, case-insensitively; a RegExp is tested as given. Applies
+   * whatever `ignoreBots` is set to.
+   */
+  ignoreUserAgents?: Array<string | RegExp>;
+
   /** Sample rate for error reporting (0.0 to 1.0) */
   sampleRate?: number;
 
@@ -189,7 +210,7 @@ export interface LaraBugClient {
   /** Capture a message */
   captureMessage(message: string, level?: 'error' | 'warning' | 'info'): void;
 
-  /** Add a breadcrumb */
+  /** Add a breadcrumb. Dropped by a client that is not active. */
   addBreadcrumb(breadcrumb: Omit<Breadcrumb, 'timestamp'>): void;
 
   /** Set user context */

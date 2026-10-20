@@ -30,8 +30,8 @@
     "vue": ">=3.0.0"
   },
   "dependencies": {
-    "@larabug/browser": "^0.2.0",
-    "@larabug/core": "^0.2.0"
+    "@larabug/browser": "^0.2.1",
+    "@larabug/core": "^0.3.0"
   },
   "devDependencies": {
     "@rollup/plugin-typescript": "^11.1.6",

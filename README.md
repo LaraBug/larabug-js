@@ -59,6 +59,33 @@ client.isActive();  // false when nothing will be reported
 client.getStatus(); // { active: false, reason: 'no usable credentials. ...' }
 ```
 
+## Crawlers and automated browsers
+
+Search engines render your pages with your JavaScript, and their errors are rarely ones you can fix. Google's renderer, for example, cuts off requests a few milliseconds after the page loads, so an Inertia app with deferred props reports a network error for every page Googlebot visits. The SDK therefore reports nothing for crawlers. For such a visitor the client is inert, as with `enabled: false`: it installs no handlers, keeps no breadcrumbs and sends nothing.
+
+A visitor counts as a crawler when `navigator.userAgent` matches one of Googlebot, GoogleOther, Google-InspectionTool, AdsBot-Google, Mediapartners-Google, Storebot-Google, bingbot, Slurp, DuckDuckBot, Baiduspider, YandexBot, Applebot, facebookexternalhit, Twitterbot, LinkedInBot, Pinterestbot, AhrefsBot, SemrushBot, MJ12bot, PetalBot, Bytespider, GPTBot, ClaudeBot, PerplexityBot, CCBot, HeadlessChrome or Lighthouse (which includes Chrome-Lighthouse), ignoring case. A user agent that calls itself a `bot`, `crawler` or `spider` (as in `ExampleBot/1.0`) counts too. The full pattern is exported as `KNOWN_CRAWLERS`. Browsers driven by automation such as Selenium, Puppeteer or Playwright set `navigator.webdriver`, and are left out in the same way.
+
+```js
+LaraBug.init({
+  ingest_key: 'lbi_...',
+
+  ignoreBots: true,      // the default. false reports crawlers like anyone else
+  ignoreWebdriver: true, // the default. false reports browsers with navigator.webdriver set
+
+  // More user agents to report nothing for. A string matches anywhere in the
+  // user agent, ignoring case. A RegExp is tested as given.
+  ignoreUserAgents: ['UptimeRobot', /Pingdom/i],
+});
+```
+
+`ignoreUserAgents` applies even with `ignoreBots: false`. The two options are independent, so `ignoreBots: false` does not affect `ignoreWebdriver`. Set both to false if your end to end tests should report errors. `getStatus()` says when a visitor was left out, and why:
+
+```js
+client.getStatus(); // { active: false, reason: 'the user agent is a known crawler (...)' }
+```
+
+The same options work in `init` from `@larabug/react` and in the options of `LaraBugVuePlugin`.
+
 ## Source maps
 
 Production bundles are minified, so a raw stack trace points at line 1, column 48213 of `app-D4wpJuT4.js`. Upload your source maps and LaraBug shows the original file, line and function instead.
