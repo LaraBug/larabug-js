@@ -11,6 +11,7 @@ import {
 import { DataFilter } from './data-filter';
 import { RateLimiter } from './rate-limiter';
 import { parseStackTrace } from './stack-parser';
+import { ignoredVisitorReason } from './crawlers';
 
 /**
  * Set at build time by @larabug/vite (or any bundler's define), or assigned on
@@ -49,6 +50,15 @@ function asObject<T>(value: unknown, fallback: T): T {
 function asStringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
+
+function asPatternList(value: unknown): Array<string | RegExp> {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string | RegExp => typeof entry === 'string' || entry instanceof RegExp)
+    : [];
+}
+
+/** A status, and whether being inert is what the caller expects, so not worth a warning. */
+type ResolvedStatus = LaraBugClientStatus & { quiet?: boolean };
 
 /** The release the build injected, or an empty string when there is none. */
 export function injectedRelease(): string {
@@ -97,25 +107,26 @@ export class BaseLaraBugClient implements LaraBugClient {
 
   constructor(options: LaraBugOptions = {}) {
     let normalized: Required<LaraBugOptions>;
-    let status: LaraBugClientStatus;
+    let resolved: ResolvedStatus;
     let failure: unknown;
 
     try {
       normalized = this.normalizeOptions(options);
-      status = this.resolveStatus(normalized);
+      resolved = this.resolveStatus(normalized);
     } catch (error) {
       // normalizeOptions reads every value defensively, so reaching here means
       // the options object itself misbehaved: a throwing getter, a dead proxy.
       normalized = this.normalizeOptions({});
-      status = { active: false, reason: 'the options object could not be read' };
+      resolved = { active: false, reason: 'the options object could not be read' };
       failure = error;
     }
+
+    const { quiet, ...status } = resolved;
 
     this.options = normalized;
     this.status = status;
 
-    // Silent when the caller asked for silence with `enabled: false`.
-    if (!status.active && status.reason !== null && normalized.enabled) {
+    if (!status.active && status.reason !== null && !quiet) {
       warn(
         `[LaraBug] Error reporting is off: ${status.reason}. ` +
           'The SDK is inert; the rest of the page is unaffected.',
@@ -183,6 +194,9 @@ export class BaseLaraBugClient implements LaraBugClient {
         headers: asObject<Record<string, string>>(transport.headers, {}),
       },
       verifySSL: given.verifySSL !== false,
+      ignoreBots: given.ignoreBots !== false,
+      ignoreWebdriver: given.ignoreWebdriver !== false,
+      ignoreUserAgents: asPatternList(given.ignoreUserAgents),
       blacklist: asStringList(given.blacklist),
       urlBlacklist: asStringList(given.urlBlacklist),
       maxEventsPerMinute: asNumber(given.maxEventsPerMinute, 100),
@@ -194,11 +208,11 @@ export class BaseLaraBugClient implements LaraBugClient {
    * Two credentials reach the ingest route: a project's ingest key on its own,
    * or the older account login key paired with a project key.
    */
-  private resolveStatus(options: Required<LaraBugOptions>): LaraBugClientStatus {
+  private resolveStatus(options: Required<LaraBugOptions>): ResolvedStatus {
     // Before the credentials, so that a caller who turned reporting off is not
     // told about keys they therefore did not have to supply.
     if (!options.enabled) {
-      return { active: false, reason: 'the enabled option is false' };
+      return { active: false, reason: 'the enabled option is false', quiet: true };
     }
 
     if (!options.ingest_key && !(options.login_key && options.project_key)) {
@@ -208,6 +222,14 @@ export class BaseLaraBugClient implements LaraBugClient {
           'no usable credentials. Pass ingest_key (your project\'s key, the one safe to put in a ' +
           'browser), or dsn, or both login_key and project_key',
       };
+    }
+
+    // After the credentials, so that a missing key still shows up when the
+    // site is opened in Lighthouse or a headless test. Nobody reads a
+    // crawler's console, so this one is quiet.
+    const ignored = ignoredVisitorReason(options);
+    if (ignored) {
+      return { active: false, reason: ignored, quiet: true };
     }
 
     return { active: true, reason: null };
@@ -315,6 +337,12 @@ export class BaseLaraBugClient implements LaraBugClient {
    * Add a breadcrumb
    */
   addBreadcrumb(breadcrumb: Omit<Breadcrumb, 'timestamp'>): void {
+    // The framework plugins add breadcrumbs whether or not the client is
+    // active. An inert client never sends them, so it does not keep them.
+    if (!this.status.active) {
+      return;
+    }
+
     const fullBreadcrumb: Breadcrumb = {
       ...breadcrumb,
       timestamp: Date.now(),
