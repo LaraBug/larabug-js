@@ -30,8 +30,8 @@
     "@inertiajs/core": ">=1.0.0"
   },
   "dependencies": {
-    "@larabug/browser": "^0.2.0",
-    "@larabug/core": "^0.2.0"
+    "@larabug/browser": "^0.2.1",
+    "@larabug/core": "^0.3.0"
   },
   "devDependencies": {
     "@inertiajs/core": "^3.9.1",
