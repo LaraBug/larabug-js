@@ -2,6 +2,8 @@
 
 A Vite plugin that makes JavaScript errors in LaraBug readable. On `vite build` it writes hidden source maps, uploads them to LaraBug under the build's release, and deletes them from the output so visitors never get them. The same release goes into your bundle, and `@larabug/browser` sends it with every error, so LaraBug knows which maps to apply.
 
+After the build it also sends your lockfile to LaraBug, which checks your npm packages for known vulnerabilities. See [Dependency scanning](#dependency-scanning).
+
 `vite dev` is untouched.
 
 ## Installation
@@ -95,6 +97,7 @@ larabug({
 | `dryRun` | `false` | List what would go up and send nothing. Maps are still removed unless `removeSourceMaps` is `false`. |
 | `silent` | `false` | Print errors only. |
 | `failOnError` | `false` | Stop the build when an upload fails or there is no key. |
+| `cveScan` | `true` | Send the lockfile for a vulnerability scan after the build. `false` turns it off. |
 
 ## Source map settings
 
@@ -107,6 +110,22 @@ If you set `build.sourcemap` yourself, the plugin leaves it alone. With `true` t
 A failed upload never fails your build unless you set `failOnError`. The plugin prints which files failed and why, and deploys carry on with unreadable stack traces for that release. LaraBug refusing the key stops the remaining uploads straight away, because every other file would be refused too.
 
 The maps are deleted whether the upload worked or not. Keeping them would put them on your public disk.
+
+## Dependency scanning
+
+Once the client build is written, the plugin reads the project's lockfile and sends the packages in it to LaraBug, which matches them against known vulnerabilities (CVEs). It uses the same key and host as the source map upload.
+
+The plugin looks in Vite's root, then in each parent directory up to the first one with a lockfile, so a monorepo's root lockfile is found from an app inside it. Within one directory it takes the first of `package-lock.json`, `pnpm-lock.yaml` and `yarn.lock`. It reads `package-lock.json` versions 1, 2 and 3, `pnpm-lock.yaml` from pnpm 7 onwards, and `yarn.lock` from Yarn 1 and Yarn 2 and later.
+
+Each package goes up once per version, with whether only development tooling uses it. `yarn.lock` does not record that, so with Yarn every package counts as a production one. Local, linked and git dependencies are left out, since they have no published versions to check. Vite's mode, such as `production`, is sent as the environment. A lockfile LaraBug has already seen is not stored again.
+
+The scan never fails or holds up the build. It is sent once, without retries, alongside the source map upload, and gives up after 10 seconds. A refused request, an unreachable host or a lockfile that cannot be read prints one warning, and the build carries on, even with `failOnError`. Without a key nothing is sent. In a dry run the plugin only says what it would send. `vite build --ssr` sends nothing, so a Laravel deploy that runs both builds sends the lockfile once.
+
+To turn it off:
+
+```js
+larabug({ cveScan: false });
+```
 
 ## SSR
 

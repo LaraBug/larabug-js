@@ -52,7 +52,7 @@ function laravelApp(): string {
 function viteBuild(
   options: Record<string, unknown>,
   env: Record<string, string>,
-  ssr = false
+  mode: '' | 'ssr' | 'serve' = ''
 ): Promise<string> {
   const childEnv: Record<string, string | undefined> = { ...process.env, ...env };
   for (const name of [
@@ -73,7 +73,7 @@ function viteBuild(
   return new Promise((resolvePromise, reject) => {
     execFile(
       process.execPath,
-      [buildScript, pluginEntry, JSON.stringify(options), ssr ? 'ssr' : ''],
+      [buildScript, pluginEntry, JSON.stringify(options), mode],
       { cwd: app, env: childEnv },
       (error, stdout, stderr) =>
         error
@@ -166,7 +166,7 @@ describe('vite build with laravel-vite-plugin', () => {
     await viteBuild(
       {},
       { LARABUG_KEY: 'lbi_e2e', LARABUG_HOST: server.host, LARABUG_RELEASE: 'e2e-release' },
-      true
+      'ssr'
     );
 
     expect(server.requests).toHaveLength(0);
@@ -195,5 +195,62 @@ describe('vite build with laravel-vite-plugin', () => {
         }
       )
     ).rejects.toThrow('failed to upload');
+  });
+});
+
+describe('the CVE scan in a real build', () => {
+  const env = () => ({
+    LARABUG_KEY: 'lbi_e2e',
+    LARABUG_HOST: server.host,
+    LARABUG_RELEASE: 'e2e-release',
+  });
+  const scans = () => server.requests.filter((request) => request.path === '/api/log');
+
+  beforeEach(() => {
+    writeFileSync(
+      join(app, 'package-lock.json'),
+      readFileSync(join(__dirname, 'fixtures/package-lock-v3.json'))
+    );
+  });
+
+  it('sends the lockfile once, next to the source maps', async () => {
+    const output = await viteBuild({}, env());
+
+    expect(scans()).toHaveLength(1);
+    expect(scans()[0].headers['x-larabug-ingest-key']).toBe('lbi_e2e');
+    expect(scans()[0].json).toMatchObject({
+      type: 'cve_scan',
+      npm_lock: {
+        lockfile: 'package-lock.json',
+        environment: 'production',
+        node_version: process.versions.node,
+        source: 'vite-plugin',
+      },
+    });
+    expect(scans()[0].json.npm_lock.packages).toHaveLength(7);
+    expect(server.requests.filter((request) => request.path === '/api/sourcemaps')).toHaveLength(2);
+    expect(output).toContain('sent 7 package(s) from package-lock.json for a CVE scan');
+  });
+
+  it('sends nothing from the SSR build, so a Laravel deploy sends it once', async () => {
+    await viteBuild({}, env(), 'ssr');
+
+    expect(server.requests).toHaveLength(0);
+  });
+
+  it('sends nothing from the dev server', async () => {
+    await viteBuild({}, env(), 'serve');
+
+    expect(server.requests).toHaveLength(0);
+  });
+
+  it('does not fail the build when LaraBug cannot be reached', async () => {
+    const output = await viteBuild(
+      { retries: 0 },
+      { ...env(), LARABUG_HOST: 'http://127.0.0.1:9' }
+    );
+
+    expect(output).toContain('CVE scan skipped, the build carries on: fetch failed');
+    expect(filesIn('public/build')).toContain('manifest.json');
   });
 });
