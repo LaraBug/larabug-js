@@ -1,7 +1,7 @@
 {
   "name": "@larabug/vite",
-  "version": "0.1.0",
-  "description": "Vite plugin that uploads source maps to LaraBug and stamps every error with the build's release",
+  "version": "0.2.0",
+  "description": "Vite plugin that uploads source maps to LaraBug, stamps every error with the build's release, and sends the lockfile for vulnerability scanning",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

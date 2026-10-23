@@ -17,6 +17,8 @@ import {
   SourceMapUpload,
   uploadSourceMaps,
 } from '@larabug/sourcemaps';
+import { cveScanPayload, sendCveScan } from './cve-scan';
+import { findLockfile, readLockfile } from './lockfile';
 
 export interface LaraBugViteOptions {
   /**
@@ -61,6 +63,12 @@ export interface LaraBugViteOptions {
 
   /** Fail the build when an upload fails. Defaults to false. */
   failOnError?: boolean;
+
+  /**
+   * Send the project's lockfile to LaraBug after each build, to be checked for
+   * known vulnerabilities. Never fails the build. Defaults to true.
+   */
+  cveScan?: boolean;
 }
 
 /**
@@ -81,13 +89,19 @@ interface PluginContextLike {
  * `__LARABUG_RELEASE__` and `import.meta.env.VITE_LARABUG_RELEASE`, which
  * `@larabug/browser` reads by default, so every error names the build it came
  * from. Only `vite build` is affected, and SSR bundles are never uploaded.
+ * After the client build it also sends the project's lockfile to LaraBug to be
+ * checked for known vulnerabilities.
  */
 export function larabug(options: LaraBugViteOptions = {}): Plugin {
   let config: ResolvedConfig;
+  let root = process.cwd();
+  let command = 'build';
+  let mode = 'production';
   let env: Record<string, string> = {};
   let release: string | null = null;
   let logger: Logger;
   let warnedAboutBase = false;
+  let scanned = false;
   const accepts = createFileFilter(options.include, options.exclude);
 
   const isServerBuild = (context: PluginContextLike): boolean => {
@@ -104,8 +118,8 @@ export function larabug(options: LaraBugViteOptions = {}): Plugin {
     apply: 'build',
 
     config(userConfig, configEnv) {
-      const { mode } = configEnv;
-      const root = resolve(userConfig.root ?? process.cwd());
+      ({ command, mode } = configEnv);
+      root = resolve(userConfig.root ?? process.cwd());
       const envDir =
         typeof userConfig.envDir === 'string' ? resolve(root, userConfig.envDir) : root;
       env = loadEnv(envDir, mode);
@@ -182,6 +196,9 @@ export function larabug(options: LaraBugViteOptions = {}): Plugin {
         return;
       }
 
+      // Runs alongside the upload, and never fails it or the build.
+      const scanning = scanDependencies();
+
       const dir = output.dir ?? (output.file ? dirname(output.file) : config.build.outDir);
       const prefix = options.base ?? config.base;
 
@@ -235,9 +252,62 @@ export function larabug(options: LaraBugViteOptions = {}): Plugin {
           const removed = await removeFiles([...maps]);
           logger.info(`removed ${removed} source map(s) from ${dir}`);
         }
+        await scanning;
       }
     },
   };
+
+  /** Once per build. Every failure is one warning; a build without a key skips it quietly. */
+  async function scanDependencies(): Promise<void> {
+    if (options.cveScan === false || command !== 'build' || scanned) {
+      return;
+    }
+    scanned = true;
+
+    let credentials: Credentials;
+    try {
+      // The source map upload already reports a missing or unusable key.
+      credentials = parseCredentials(options.key ?? keyFromEnv(env) ?? '');
+    } catch {
+      return;
+    }
+
+    try {
+      const path = findLockfile(root);
+      if (!path) {
+        logger.info('no package-lock.json, pnpm-lock.yaml or yarn.lock found, so no CVE scan');
+        return;
+      }
+
+      const lock = readLockfile(path);
+
+      if (options.dryRun) {
+        logger.info(
+          `dry run: would send ${lock.packages.length} package(s) from ${lock.lockfile} for a CVE scan`
+        );
+        return;
+      }
+
+      const outcome = await sendCveScan(cveScanPayload(lock, credentials, mode), {
+        credentials,
+        host: options.host ?? env.LARABUG_HOST,
+      });
+
+      logger.info(
+        outcome === 'unchanged'
+          ? `${lock.lockfile} is unchanged since the last CVE scan`
+          : `sent ${lock.packages.length} package(s) from ${lock.lockfile} for a CVE scan`
+      );
+    } catch (error) {
+      // fetch's errors may come from another realm, where instanceof fails.
+      const { message, cause } = (error ?? {}) as {
+        message?: unknown;
+        cause?: { message?: unknown };
+      };
+      const reason = `${message ?? error}${cause?.message ? ` (${cause.message})` : ''}`;
+      logger.warn(`CVE scan skipped, the build carries on: ${reason}`);
+    }
+  }
 
   async function upload(
     uploads: SourceMapUpload[],

@@ -6,6 +6,7 @@ export interface ReceivedUpload {
   path: string;
   headers: IncomingHttpHeaders;
   fields: Record<string, string>;
+  json?: any;
   sourcemap?: { filename: string; type: string; content: string };
 }
 
@@ -17,8 +18,8 @@ export interface ScriptedResponse {
 
 /**
  * A stand-in for the LaraBug host on 127.0.0.1. Records every request with its
- * multipart form parsed, and answers from a script of responses (201 once the
- * script runs out).
+ * multipart form or JSON body parsed, and answers from a script of responses
+ * (201 once the script runs out).
  */
 export class LaraBugServer {
   readonly requests: ReceivedUpload[] = [];
@@ -57,6 +58,8 @@ export class LaraBugServer {
               };
             }
           }
+        } else if (String(request.headers['content-type']).startsWith('application/json')) {
+          received.json = JSON.parse(body.toString('utf8'));
         }
 
         this.requests.push(received);

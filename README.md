@@ -30,7 +30,7 @@ npm install @larabug/vue
 # Inertia.js (use alongside @larabug/vue or @larabug/react)
 npm install @larabug/inertia
 
-# Source maps, for Vite builds
+# Source maps and dependency scanning, for Vite builds
 npm install --save-dev @larabug/vite
 
 # Source maps, for any other bundler
@@ -111,6 +111,10 @@ npx @larabug/sourcemaps upload --release "$(git rev-parse HEAD)" --dir public/js
 ```
 
 That README shows how to inject the release with webpack's `DefinePlugin`.
+
+## Vulnerable dependencies
+
+After each `vite build`, `@larabug/vite` also sends your `package-lock.json`, `pnpm-lock.yaml` or `yarn.lock` to LaraBug, which checks the packages in it against known vulnerabilities. Laravel apps get the same from the PHP SDK for `composer.lock`; this covers apps without it. Turn it off with `larabug({ cveScan: false })`.
 
 ## Documentation
 
