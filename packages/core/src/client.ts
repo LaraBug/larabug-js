@@ -7,9 +7,10 @@ import {
   User,
   RequestInfo,
   TransportOptions,
+  RetryBufferOptions,
 } from './types';
 import { DataFilter } from './data-filter';
-import { RateLimiter } from './rate-limiter';
+import { RateLimiter, RetryDecision } from './rate-limiter';
 import { parseStackTrace } from './stack-parser';
 import { ignoredVisitorReason } from './crawlers';
 
@@ -56,6 +57,37 @@ function asPatternList(value: unknown): Array<string | RegExp> {
     ? value.filter((entry): entry is string | RegExp => typeof entry === 'string' || entry instanceof RegExp)
     : [];
 }
+
+/**
+ * Somewhere to keep a report the endpoint could not take right now, for a
+ * runtime that can send it later. @larabug/browser provides one; without it a
+ * report that fails is dropped.
+ */
+export interface Outbox {
+  /**
+   * Keep an encoded report. `attempts` is how many sends of it already failed,
+   * and the report is not sent again before `notBefore` (epoch ms).
+   */
+  defer(payload: string, attempts: number, notBefore: number): void;
+
+  /** A report just went through, so whatever was kept can follow it. */
+  delivered(): void;
+}
+
+/**
+ * What one POST of a report came to. A failure is `deferrable` when the report
+ * is worth keeping for later: a 5xx, a 429 or a network failure, and not while
+ * the server's kill switch is on.
+ */
+export type Delivery =
+  | { outcome: 'sent' | 'rejected' }
+  | {
+      outcome: 'failed';
+      retry: RetryDecision;
+      deferrable: boolean;
+      notBefore: number;
+      error?: unknown;
+    };
 
 /** A status, and whether being inert is what the caller expects, so not worth a warning. */
 type ResolvedStatus = LaraBugClientStatus & { quiet?: boolean };
@@ -104,6 +136,9 @@ export class BaseLaraBugClient implements LaraBugClient {
   private tags: Record<string, string> = {};
   private dataFilter: DataFilter;
   private rateLimiter: RateLimiter;
+
+  /** Set by a subclass that can keep failed reports. See Outbox. */
+  protected outbox: Outbox | null = null;
 
   constructor(options: LaraBugOptions = {}) {
     let normalized: Required<LaraBugOptions>;
@@ -173,6 +208,7 @@ export class BaseLaraBugClient implements LaraBugClient {
     }
 
     const transport = asObject<TransportOptions>(given.transport, {});
+    const retryBuffer = asObject<RetryBufferOptions>(given.retryBuffer, {});
 
     return {
       login_key,
@@ -201,6 +237,12 @@ export class BaseLaraBugClient implements LaraBugClient {
       urlBlacklist: asStringList(given.urlBlacklist),
       maxEventsPerMinute: asNumber(given.maxEventsPerMinute, 100),
       dedupeWindowMs: asNumber(given.dedupeWindowMs, 5000),
+      retryBuffer: {
+        enabled: given.retryBuffer !== false && retryBuffer.enabled !== false,
+        maxReports: asNumber(retryBuffer.maxReports, 50),
+        maxBytes: asNumber(retryBuffer.maxBytes, 500_000),
+        maxAgeMs: asNumber(retryBuffer.maxAgeMs, 24 * 60 * 60 * 1000),
+      },
     };
   }
 
@@ -519,25 +561,36 @@ export class BaseLaraBugClient implements LaraBugClient {
       return;
     }
 
-    // Dedupe + rate limit + circuit breaker check.
-    if (!this.rateLimiter.shouldSend(processedEvent)) {
+    // Dedupe + rate limit + circuit breaker check. With an outbox, an event
+    // that arrives during a cooldown is kept for after it instead.
+    if (!this.rateLimiter.shouldSend(processedEvent, this.outbox !== null)) {
       return;
     }
 
-    const url = `${this.options.endpoint}`;
-
     // Wrap event with project key and type (matching PHP SDK format). An ingest
     // key already names the project server-side, so the field is omitted then.
+    //
+    // occurred_at is the moment of capture, so a report the retry buffer sends
+    // later still lands at the time it happened. A server that does not know
+    // the field ignores it, and one that does falls back to the arrival time
+    // for a value more than 7 days old or in the future.
     const payload = JSON.stringify({
       type: 'javascript_error',
+      occurred_at: new Date().toISOString(),
       ...(this.options.project_key ? { project: this.options.project_key } : {}),
       ...processedEvent,
     });
 
+    // Offline, a request can only fail, so the report waits for the network.
+    if (this.outbox && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.outbox.defer(payload, 0, 0);
+      return;
+    }
+
     // Fire and forget with retry. We intentionally do not `await` this so
     // the caller's stack unwinds immediately — the retry loop happens in
     // the background and can't block rendering.
-    void this.sendViaFetch(url, payload);
+    void this.sendViaFetch(payload);
   }
 
   /**
@@ -563,54 +616,87 @@ export class BaseLaraBugClient implements LaraBugClient {
   }
 
   /**
-   * Send via fetch API with retry + backoff
+   * Send via fetch API with retry + backoff. A report that still fails goes to
+   * the outbox when it is worth keeping, and is dropped otherwise.
    */
-  private async sendViaFetch(url: string, payload: string, attempt = 0): Promise<void> {
-    if (this.rateLimiter.isDisabled()) {
+  private async sendViaFetch(payload: string, attempt = 0): Promise<void> {
+    const maxAttempts = Math.max(1, this.options.transport.retries || 1);
+    const result = await this.deliver(payload);
+
+    if (result.outcome !== 'failed') {
+      if (result.outcome === 'sent') {
+        this.outbox?.delivered();
+      }
       return;
     }
 
-    const maxAttempts = Math.max(1, this.options.transport.retries || 1);
+    if (result.retry.shouldRetry && attempt + 1 < maxAttempts) {
+      await this.wait(result.retry.delayMs);
+      return this.sendViaFetch(payload, attempt + 1);
+    }
+
+    if (result.deferrable && this.outbox) {
+      this.outbox.defer(payload, attempt + 1, result.notBefore);
+      return;
+    }
+
+    // Final failure. Log once and stop — do NOT throw.
+    if (result.error !== undefined && typeof console !== 'undefined' && console.error) {
+      console.error('LaraBug: Failed to send error', result.error);
+    }
+  }
+
+  /**
+   * POST one encoded report, once. Never rejects. Protected so that an outbox
+   * can send what it kept through the same credentials and guardrails.
+   */
+  protected async deliver(payload: string): Promise<Delivery> {
+    if (this.rateLimiter.isDisabled()) {
+      return this.failed({ shouldRetry: false, delayMs: 0 }, true);
+    }
 
     try {
-      const response = await fetch(url, {
+      const response = await fetch(this.options.endpoint, {
         method: 'POST',
         headers: this.buildHeaders(),
         body: payload,
-        keepalive: true,
+        // Browsers refuse a keepalive body over 64 KiB, and fail the request.
+        keepalive: payload.length < 60_000,
       });
 
       if (response.ok) {
         this.rateLimiter.recordSuccess();
-        return;
+        return { outcome: 'sent' };
       }
 
-      // Non-2xx. Decide whether to retry.
+      // Any 5xx counts, since a proxy in front of a server that is down
+      // answers 520-530. A 4xx never does, except 429.
+      const deferrable = response.status === 429 || response.status >= 500;
+
       if (!this.rateLimiter.isRetryableStatus(response.status)) {
-        // Permanent failure (4xx other than throttling). Don't retry, don't
-        // hammer the server. Just silently drop so we don't create a log
-        // feedback loop.
+        // Not worth retrying here (4xx other than throttling, or a 5xx such as
+        // 501 or 522). Don't hammer the server. Without an outbox the report
+        // is silently dropped so we don't create a log feedback loop.
         this.rateLimiter.recordSuccess();
-        return;
+        return deferrable
+          ? this.failed({ shouldRetry: false, delayMs: 0 }, true)
+          : { outcome: 'rejected' };
       }
 
-      const decision = this.rateLimiter.recordFailure(response);
-      if (decision.shouldRetry && attempt + 1 < maxAttempts) {
-        await this.wait(decision.delayMs);
-        return this.sendViaFetch(url, payload, attempt + 1);
-      }
+      return this.failed(this.rateLimiter.recordFailure(response), deferrable);
     } catch (error) {
-      const decision = this.rateLimiter.recordFailure(null);
-      if (decision.shouldRetry && attempt + 1 < maxAttempts) {
-        await this.wait(decision.delayMs);
-        return this.sendViaFetch(url, payload, attempt + 1);
-      }
-
-      // Final failure. Log once and stop — do NOT throw.
-      if (typeof console !== 'undefined' && console.error) {
-        console.error('LaraBug: Failed to send error', error);
-      }
+      return this.failed(this.rateLimiter.recordFailure(null), true, error);
     }
+  }
+
+  private failed(retry: RetryDecision, deferrable: boolean, error?: unknown): Delivery {
+    return {
+      outcome: 'failed',
+      retry,
+      deferrable: deferrable && !this.rateLimiter.isKillSwitched(),
+      notBefore: this.rateLimiter.getStats().disabledUntil ?? 0,
+      error,
+    };
   }
 
   private wait(ms: number): Promise<void> {

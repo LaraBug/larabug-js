@@ -52,6 +52,9 @@ export class RateLimiter {
    */
   private disabledUntil: number | null = null;
 
+  /** Whether the current cooldown is the server's X-LaraBug-Disable-Capture. */
+  private killSwitched = false;
+
   /** Counter of events dropped while disabled — surfaced via getStats(). */
   private droppedEvents = 0;
 
@@ -70,18 +73,17 @@ export class RateLimiter {
    *
    * On `true` the emission is recorded internally; callers can treat the
    * decision as consumed.
+   *
+   * With `duringCooldown`, a cooldown from Retry-After or the breaker lets the
+   * event through, for a caller that keeps it until the cooldown is over. The
+   * server's kill switch never does.
    */
-  shouldSend(event: ErrorEvent): boolean {
+  shouldSend(event: ErrorEvent, duringCooldown = false): boolean {
     const now = Date.now();
 
-    if (this.disabledUntil !== null) {
-      if (now < this.disabledUntil) {
-        this.droppedEvents++;
-        return false;
-      }
-      // Cooldown elapsed — clear the flag but keep failure count so the
-      // breaker re-opens quickly if the transport is still broken.
-      this.disabledUntil = null;
+    if (this.isDisabled() && (!duringCooldown || this.killSwitched)) {
+      this.droppedEvents++;
+      return false;
     }
 
     // Sliding-window rate limit.
@@ -128,12 +130,14 @@ export class RateLimiter {
 
     const cooldownFromHeaders = this.extractCooldownFromHeaders(response);
     if (cooldownFromHeaders !== null) {
-      this.disabledUntil = Date.now() + cooldownFromHeaders;
+      this.disabledUntil = Date.now() + cooldownFromHeaders.ms;
+      this.killSwitched = cooldownFromHeaders.killSwitch;
       return { shouldRetry: false, delayMs: 0 };
     }
 
     if (this.consecutiveFailures >= this.breakerThreshold) {
       this.disabledUntil = Date.now() + this.breakerCooldownMs;
+      this.killSwitched = false;
       return { shouldRetry: false, delayMs: 0 };
     }
 
@@ -147,10 +151,18 @@ export class RateLimiter {
   isDisabled(): boolean {
     if (this.disabledUntil === null) return false;
     if (Date.now() >= this.disabledUntil) {
+      // Cooldown elapsed — clear the flag but keep failure count so the
+      // breaker re-opens quickly if the transport is still broken.
       this.disabledUntil = null;
+      this.killSwitched = false;
       return false;
     }
     return true;
+  }
+
+  /** True while the server's X-LaraBug-Disable-Capture asks for no events at all. */
+  isKillSwitched(): boolean {
+    return this.isDisabled() && this.killSwitched;
   }
 
   /**
@@ -181,7 +193,9 @@ export class RateLimiter {
   }
 
   /** Read Retry-After and X-LaraBug-Disable-Capture from the response, if any. */
-  private extractCooldownFromHeaders(response?: Response | null): number | null {
+  private extractCooldownFromHeaders(
+    response?: Response | null
+  ): { ms: number; killSwitch: boolean } | null {
     if (!response || typeof response.headers?.get !== 'function') {
       return null;
     }
@@ -191,7 +205,7 @@ export class RateLimiter {
     if (killSwitch) {
       const seconds = parseInt(killSwitch, 10);
       if (!isNaN(seconds) && seconds > 0) {
-        return seconds * 1000;
+        return { ms: seconds * 1000, killSwitch: true };
       }
     }
 
@@ -200,12 +214,12 @@ export class RateLimiter {
     if (retryAfter) {
       const asSeconds = parseInt(retryAfter, 10);
       if (!isNaN(asSeconds) && asSeconds > 0) {
-        return asSeconds * 1000;
+        return { ms: asSeconds * 1000, killSwitch: false };
       }
       const asDate = Date.parse(retryAfter);
       if (!isNaN(asDate)) {
         const delta = asDate - Date.now();
-        return delta > 0 ? delta : null;
+        return delta > 0 ? { ms: delta, killSwitch: false } : null;
       }
     }
 

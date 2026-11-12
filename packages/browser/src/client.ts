@@ -1,4 +1,11 @@
-import { BaseLaraBugClient, LaraBugOptions, RequestInfo, DataFilter } from '@larabug/core';
+import {
+  BaseLaraBugClient,
+  LaraBugOptions,
+  RequestInfo,
+  DataFilter,
+  RetryBufferOptions,
+} from '@larabug/core';
+import { RetryBuffer } from './retry-buffer';
 
 /**
  * Browser-specific LaraBug client with automatic instrumentation
@@ -55,6 +62,7 @@ export class BrowserClient extends BaseLaraBugClient {
     this.safely('fetch', () => this.instrumentFetch());
     this.safely('XMLHttpRequest', () => this.instrumentXHR());
     this.safely('navigation', () => this.captureNavigation());
+    this.safely('the retry buffer', () => this.installRetryBuffer());
 
     this.installed = true;
   }
@@ -68,6 +76,31 @@ export class BrowserClient extends BaseLaraBugClient {
         console.warn(`[LaraBug] Could not instrument ${step}.`, error);
       }
     }
+  }
+
+  /**
+   * Keep reports the endpoint could not take, and send them later. Browser
+   * only: outside one the client has no outbox and drops them, as before.
+   */
+  private installRetryBuffer(): void {
+    const { retryBuffer, endpoint, ingest_key, project_key } = this.getOptions();
+    const limits = retryBuffer as Required<RetryBufferOptions>;
+
+    if (!limits.enabled) {
+      return;
+    }
+
+    const buffer = new RetryBuffer(
+      (payload) => this.deliver(payload),
+      limits,
+      `${endpoint} ${ingest_key} ${project_key}`
+    );
+
+    this.outbox = buffer;
+    window.addEventListener('online', () => void buffer.flush());
+
+    // Whatever an earlier page kept is sent once it falls due.
+    buffer.schedule();
   }
 
   /**
