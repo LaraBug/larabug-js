@@ -37,3 +37,21 @@ describe('capturing without a DOM', () => {
     delete (globalThis as any).fetch;
   });
 });
+
+describe('a report that fails without a DOM', () => {
+  it('is dropped as before, since the retry buffer is browser only', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue({ ok: false, status: 503, headers: { get: () => null } });
+    (globalThis as any).fetch = fetchMock;
+
+    const client = init({ ingest_key: 'lbi_abc123', transport: { retries: 1 } });
+    expect(() => client.captureException(new Error('during a server-side render'))).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(typeof localStorage).toBe('undefined');
+
+    delete (globalThis as any).fetch;
+  });
+});

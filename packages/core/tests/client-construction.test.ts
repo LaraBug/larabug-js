@@ -72,6 +72,25 @@ describe('construction never throws', () => {
     expect(client.getStatus().reason).toMatch(/could not be read/);
   });
 
+  it('reads the retry buffer options defensively', () => {
+    const defaults = { enabled: true, maxReports: 50, maxBytes: 500_000, maxAgeMs: 86_400_000 };
+
+    expect(new BaseLaraBugClient({}).getOptions().retryBuffer).toEqual(defaults);
+    expect(new BaseLaraBugClient({ retryBuffer: false }).getOptions().retryBuffer).toEqual({
+      ...defaults,
+      enabled: false,
+    });
+    expect(
+      new BaseLaraBugClient({ retryBuffer: { maxReports: 10 } }).getOptions().retryBuffer
+    ).toEqual({
+      ...defaults,
+      maxReports: 10,
+    });
+    expect(
+      new BaseLaraBugClient({ retryBuffer: 'yes' as unknown as boolean }).getOptions().retryBuffer
+    ).toEqual(defaults);
+  });
+
   it('accepts a DSN it cannot parse', () => {
     expect(() => new BaseLaraBugClient({ dsn: 'not a url' })).not.toThrow();
     expect(() => new BaseLaraBugClient({ dsn: 'https://host/api/log' })).not.toThrow();

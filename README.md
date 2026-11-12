@@ -86,6 +86,27 @@ client.getStatus(); // { active: false, reason: 'the user agent is a known crawl
 
 The same options work in `init` from `@larabug/react` and in the options of `LaraBugVuePlugin`.
 
+## Reports that cannot be delivered
+
+When LaraBug cannot take a report (a 5xx during a deploy or an outage, a 429, a network failure, or the browser being offline), the browser SDK keeps it in `localStorage` and sends it later instead of dropping it. Kept reports go out on the next page load, when the browser comes back online, and right after the next report that does get through, with backoff in between and after any `Retry-After` the server sent. Every tab of a site shares the queue, and a short lock keeps two tabs from sending the same report. Any other 4xx means the report will never be accepted, so it is dropped.
+
+Only the report as it would have been sent is kept, so after the data filter and `beforeSend`, and without your key. Where `localStorage` is unavailable or full, reports are kept in memory for the life of the page. Outside a browser, such as during a server side render, nothing is kept.
+
+```js
+LaraBug.init({
+  ingest_key: 'lbi_...',
+
+  // The defaults. Past any bound the oldest reports are dropped first.
+  retryBuffer: {
+    maxReports: 50,
+    maxBytes: 500000,         // characters of report JSON, all reports together
+    maxAgeMs: 24 * 60 * 60 * 1000,
+  },
+});
+
+LaraBug.init({ ingest_key: 'lbi_...', retryBuffer: false }); // drop what cannot be delivered
+```
+
 ## Source maps
 
 Production bundles are minified, so a raw stack trace points at line 1, column 48213 of `app-D4wpJuT4.js`. Upload your source maps and LaraBug shows the original file, line and function instead.

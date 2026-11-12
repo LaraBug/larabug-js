@@ -110,6 +110,29 @@ export interface LaraBugOptions {
    * duplicate and suppressed. Defaults to 5000.
    */
   dedupeWindowMs?: number;
+
+  /**
+   * In a browser, keep a report the server could not take (a 5xx, a 429, a
+   * network failure, or the browser being offline) in localStorage and send it
+   * later, instead of dropping it. On by default; false turns it off. Has no
+   * effect outside a browser.
+   */
+  retryBuffer?: boolean | RetryBufferOptions;
+}
+
+/** Bounds of the browser's retry buffer. Past any of them the oldest reports go first. */
+export interface RetryBufferOptions {
+  /** Defaults to true. */
+  enabled?: boolean;
+
+  /** Most reports kept. Defaults to 50. */
+  maxReports?: number;
+
+  /** Most characters of report JSON kept, all reports together. Defaults to 500000. */
+  maxBytes?: number;
+
+  /** Age in milliseconds after which a report is given up on. Defaults to 24 hours. */
+  maxAgeMs?: number;
 }
 
 /** Whether a client is reporting, and why it isn't when it isn't. */
