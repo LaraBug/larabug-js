@@ -569,8 +569,14 @@ export class BaseLaraBugClient implements LaraBugClient {
 
     // Wrap event with project key and type (matching PHP SDK format). An ingest
     // key already names the project server-side, so the field is omitted then.
+    //
+    // occurred_at is the moment of capture, so a report the retry buffer sends
+    // later still lands at the time it happened. A server that does not know
+    // the field ignores it, and one that does falls back to the arrival time
+    // for a value more than 7 days old or in the future.
     const payload = JSON.stringify({
       type: 'javascript_error',
+      occurred_at: new Date().toISOString(),
       ...(this.options.project_key ? { project: this.options.project_key } : {}),
       ...processedEvent,
     });

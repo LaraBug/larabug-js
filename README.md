@@ -90,7 +90,7 @@ The same options work in `init` from `@larabug/react` and in the options of `Lar
 
 When LaraBug cannot take a report (a 5xx during a deploy or an outage, a 429, a network failure, or the browser being offline), the browser SDK keeps it in `localStorage` and sends it later instead of dropping it. Kept reports go out on the next page load, when the browser comes back online, and right after the next report that does get through, with backoff in between and after any `Retry-After` the server sent. Every tab of a site shares the queue, and a short lock keeps two tabs from sending the same report. Any other 4xx means the report will never be accepted, so it is dropped.
 
-Only the report as it would have been sent is kept, so after the data filter and `beforeSend`, and without your key. Where `localStorage` is unavailable or full, reports are kept in memory for the life of the page. Outside a browser, such as during a server side render, nothing is kept.
+Every report carries the time it was captured as `occurred_at`, so one that is sent late still shows up at the time it happened. Only the report as it would have been sent is kept, so after the data filter and `beforeSend`, and without your key. Where `localStorage` is unavailable or full, reports are kept in memory for the life of the page. Outside a browser, such as during a server side render, nothing is kept.
 
 ```js
 LaraBug.init({

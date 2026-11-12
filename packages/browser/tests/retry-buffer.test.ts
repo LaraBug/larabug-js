@@ -108,6 +108,25 @@ describe('a report the server could not take', () => {
     expect(localStorage.getItem(queueKey() as string)).not.toContain('lbi_abc123');
   });
 
+  it('keeps the time it happened through localStorage, and is sent with it later', async () => {
+    fetchMock.mockResolvedValueOnce(response(503)).mockResolvedValue(response(200));
+    const capturedAt = new Date().toISOString();
+
+    start().captureException(new Error('boom'));
+    await settle();
+
+    expect(JSON.parse(kept()[0].body).occurred_at).toBe(capturedAt);
+
+    // The next page, two minutes on.
+    await settle(120_000);
+    start();
+    await settle(1_000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(sentBodies()[1]).occurred_at).toBe(capturedAt);
+    expect(kept()).toHaveLength(0);
+  });
+
   it('is kept on a status from a proxy in front of a server that is down', async () => {
     fetchMock.mockResolvedValue(response(522));
 
