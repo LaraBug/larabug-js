@@ -1,6 +1,6 @@
 {
   "name": "@larabug/sourcemaps",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Upload source maps to LaraBug from any bundler, from the command line or from Node",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

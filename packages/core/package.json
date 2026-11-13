@@ -1,6 +1,6 @@
 {
   "name": "@larabug/core",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Core functionality for LaraBug JavaScript SDKs",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
