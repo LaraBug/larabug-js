@@ -1,5 +1,13 @@
+const version = (name) => require(`./packages/${name}/package.json`).version;
+
 /** @type {import('jest').Config} */
 module.exports = {
+  // What each package's rollup build puts in place of these placeholders.
+  globals: {
+    __LARABUG_CORE_VERSION__: version('core'),
+    __LARABUG_SOURCEMAPS_VERSION__: version('sourcemaps'),
+    __LARABUG_VITE_VERSION__: version('vite'),
+  },
   roots: ['<rootDir>/packages'],
   testMatch: ['**/tests/**/*.test.ts'],
   moduleNameMapper: {

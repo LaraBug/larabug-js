@@ -1,3 +1,4 @@
+import { version as reactVersion } from 'react';
 import { init as browserInit, BrowserClient, LaraBugOptions } from '@larabug/browser';
 
 export { ErrorBoundary } from './ErrorBoundary';
@@ -15,6 +16,7 @@ export function init(options: LaraBugOptions = {}): BrowserClient {
   
   // Set framework tag globally for all errors
   reactClient.setTag('framework', 'react');
+  reactClient.setFramework('react', reactVersion);
   
   return reactClient;
 }

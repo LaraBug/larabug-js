@@ -1,8 +1,17 @@
-import { mkdtempSync, writeFileSync } from 'fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { listSourceMaps, parseCredentials, uploadSourceMaps, UploadOptions } from '../src';
 import { deadHost, LaraBugServer } from './support/larabug-server';
+
+const coreVersion = (
+  JSON.parse(readFileSync(join(__dirname, '../../core/package.json'), 'utf8')) as {
+    version: string;
+  }
+).version;
+const sourcemapsVersion = (
+  JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as { version: string }
+).version;
 
 const map = JSON.stringify({
   version: 3,
@@ -64,6 +73,9 @@ describe('an upload', () => {
     expect(request.headers['x-larabug-ingest-key']).toBe('lbi_abc123');
     expect(request.headers.authorization).toBeUndefined();
     expect(request.headers.accept).toBe('application/json');
+    expect(request.headers['x-larabug-sdk']).toBe(
+      `larabug-js/${coreVersion} node sourcemaps/${sourcemapsVersion}`
+    );
     expect(request.fields).toEqual({
       release: 'abc123',
       minified_url: '~/build/assets/app-D4wpJuT4.js',
@@ -243,5 +255,32 @@ describe('listing a release', () => {
       path: '/api/sourcemaps/releases/abc%20123',
     });
     expect(server.requests[0].headers['x-larabug-ingest-key']).toBe('lbi_abc123');
+    expect(server.requests[0].headers['x-larabug-sdk']).toBe(
+      `larabug-js/${coreVersion} node sourcemaps/${sourcemapsVersion}`
+    );
+  });
+});
+
+describe('the X-LaraBug-Sdk header', () => {
+  it('names the tool that uploads when it says who it is', async () => {
+    await uploadSourceMaps(
+      [{ sourcemapPath: mapFile('a.js.map'), minifiedUrl: '~/a.js' }],
+      options({ client: 'vite-plugin/9.9.9' })
+    );
+
+    expect(server.requests[0].headers['x-larabug-sdk']).toBe(
+      `larabug-js/${coreVersion} node vite-plugin/9.9.9`
+    );
+  });
+
+  it('is well formed', async () => {
+    await uploadSourceMaps(
+      [{ sourcemapPath: mapFile('a.js.map'), minifiedUrl: '~/a.js' }],
+      options()
+    );
+
+    expect(server.requests[0].headers['x-larabug-sdk']).toMatch(
+      /^larabug-js\/\d+\.\d+\.\d+\S* node sourcemaps\/\d+\.\d+\.\d+\S*$/
+    );
   });
 });

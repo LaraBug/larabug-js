@@ -1,13 +1,15 @@
 /**
  * @jest-environment jsdom
  */
+import { createApp, defineComponent, h, ref } from 'vue';
 import type { App } from 'vue';
-import { init, LaraBugVuePlugin } from '../src';
+import { init, LaraBugVuePlugin, useLaraBugContext, useLaraBugTag } from '../src';
 
 type Handler = (err: unknown, instance: unknown, info: string) => void;
 
 function fakeApp(errorHandler?: Handler): App & { config: { errorHandler?: Handler } } {
   return {
+    version: '3.5.13',
     config: { globalProperties: {}, errorHandler },
     mixin: jest.fn(),
     provide: jest.fn(),
@@ -76,5 +78,48 @@ describe('the Vue error handler', () => {
 
     expect(print).not.toHaveBeenCalled();
     print.mockRestore();
+  });
+});
+
+describe('the X-LaraBug-Sdk header', () => {
+  it("names Vue and the app's Vue version", () => {
+    const app = fakeApp();
+    (LaraBugVuePlugin.install as (app: App) => void)(app);
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    app.config.errorHandler?.(new Error('render broke'), null, 'render function');
+
+    expect(fetchMock.mock.calls[0][1].headers['X-LaraBug-Sdk']).toMatch(
+      /^larabug-js\/\d+\.\d+\.\d+\S* browser vue\/3\.5\.13$/
+    );
+    jest.restoreAllMocks();
+  });
+});
+
+describe('useLaraBugTag', () => {
+  it('takes a plain string as well as a ref, and so does useLaraBugContext', () => {
+    const setTag = jest.fn();
+    const setContext = jest.fn();
+    const tag = ref('first');
+
+    const Child = defineComponent({
+      setup() {
+        useLaraBugTag('page', 'dashboard');
+        useLaraBugTag('tab', tag);
+        useLaraBugContext('count', 3);
+        useLaraBugContext('form', { value: 'not a ref' });
+        return () => h('div');
+      },
+    });
+
+    const app = createApp(Child);
+    app.provide('larabug', { setTag, setContext });
+    app.mount(document.createElement('div'));
+
+    expect(setTag).toHaveBeenCalledWith('page', 'dashboard');
+    expect(setTag).toHaveBeenCalledWith('tab', 'first');
+    expect(setContext).toHaveBeenCalledWith('count', 3);
+    expect(setContext).toHaveBeenCalledWith('form', { value: 'not a ref' });
+    app.unmount();
   });
 });

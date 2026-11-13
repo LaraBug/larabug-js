@@ -72,6 +72,8 @@ export function createInertiaLaraBugPlugin(options: InertiaLaraBugOptions = {}) 
 
       // Ensure framework tag is set
       client.setTag('framework', 'inertia');
+      // @inertiajs/core exposes no version at runtime, so the token has none.
+      client.setFramework('inertia');
 
       // Inertia renamed and reshaped its events between versions (v1/v2 send
       // `exception` and `invalid`, v3 sends `networkError` and

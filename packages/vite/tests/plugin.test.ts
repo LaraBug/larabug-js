@@ -5,6 +5,16 @@ import { join, resolve } from 'path';
 import { larabug, LaraBugViteOptions, RELEASE_PLACEHOLDER } from '../src';
 import { deadHost, LaraBugServer } from '../../sourcemaps/tests/support/larabug-server';
 
+const coreVersion = (
+  JSON.parse(readFileSync(join(__dirname, '../../core/package.json'), 'utf8')) as {
+    version: string;
+  }
+).version;
+const viteVersion = (
+  JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as { version: string }
+).version;
+const sdkHeader = `larabug-js/${coreVersion} node vite-plugin/${viteVersion}`;
+
 const map = JSON.stringify({ version: 3, sources: ['app.js'], names: [], mappings: 'AAAA' });
 
 let server: LaraBugServer;
@@ -183,6 +193,7 @@ describe('the upload', () => {
     );
     expect(server.requests[0].headers['x-larabug-ingest-key']).toBe('lbi_abc');
     expect(server.requests[0].sourcemap?.content).toBe(map);
+    server.requests.forEach((request) => expect(request.headers['x-larabug-sdk']).toBe(sdkHeader));
   });
 
   it("uses a full URL when Vite's base is one", async () => {
@@ -347,6 +358,7 @@ describe('the CVE scan', () => {
     expect(scans()[0].method).toBe('POST');
     expect(scans()[0].headers['x-larabug-ingest-key']).toBe('lbi_abc');
     expect(scans()[0].headers['content-type']).toBe('application/json');
+    expect(scans()[0].headers['x-larabug-sdk']).toBe(sdkHeader);
     // An ingest key names its project, so the payload does not.
     expect(scans()[0].json).toEqual({
       type: 'cve_scan',

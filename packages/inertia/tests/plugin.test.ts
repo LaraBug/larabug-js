@@ -134,3 +134,13 @@ describe('an event shape the plugin does not know', () => {
     }
   });
 });
+
+describe('the X-LaraBug-Sdk header', () => {
+  it('names Inertia, which has no version to read at runtime', () => {
+    getCurrentClient()?.captureMessage('hi');
+
+    expect(fetchMock.mock.calls[0][1].headers['X-LaraBug-Sdk']).toMatch(
+      /^larabug-js\/\d+\.\d+\.\d+\S* browser inertia$/
+    );
+  });
+});
