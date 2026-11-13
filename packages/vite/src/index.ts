@@ -19,6 +19,7 @@ import {
 } from '@larabug/sourcemaps';
 import { cveScanPayload, sendCveScan } from './cve-scan';
 import { findLockfile, readLockfile } from './lockfile';
+import { VITE_PLUGIN_TOKEN } from './version';
 
 export interface LaraBugViteOptions {
   /**
@@ -344,6 +345,7 @@ export function larabug(options: LaraBugViteOptions = {}): Plugin {
       host: options.host ?? env.LARABUG_HOST,
       retries: options.retries,
       dryRun: options.dryRun,
+      client: VITE_PLUGIN_TOKEN,
       logger: { ...logger, info: () => undefined },
     });
 

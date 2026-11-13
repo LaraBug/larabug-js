@@ -13,6 +13,7 @@ import { DataFilter } from './data-filter';
 import { RateLimiter, RetryDecision } from './rate-limiter';
 import { parseStackTrace } from './stack-parser';
 import { ignoredVisitorReason } from './crawlers';
+import { SDK_HEADER, sdkHeaderValue, sdkToken } from './sdk';
 
 /**
  * Set at build time by @larabug/vite (or any bundler's define), or assigned on
@@ -136,6 +137,8 @@ export class BaseLaraBugClient implements LaraBugClient {
   private tags: Record<string, string> = {};
   private dataFilter: DataFilter;
   private rateLimiter: RateLimiter;
+  /** The framework token of the SDK header, set by @larabug/vue, /react and /inertia. */
+  private framework: string | null = null;
 
   /** Set by a subclass that can keep failed reports. See Outbox. */
   protected outbox: Outbox | null = null;
@@ -420,6 +423,16 @@ export class BaseLaraBugClient implements LaraBugClient {
   }
 
   /**
+   * Name the framework the SDK runs in, with its version, for the
+   * `X-LaraBug-Sdk` header: `larabug-js/0.4.2 browser vue/3.5.13`. Called by
+   * @larabug/vue, /react and /inertia when they set up the client; the last
+   * call wins.
+   */
+  setFramework(name: string, version?: string | null): void {
+    this.framework = sdkToken(name, version) || null;
+  }
+
+  /**
    * Clear breadcrumbs
    */
   clearBreadcrumbs(): void {
@@ -597,11 +610,17 @@ export class BaseLaraBugClient implements LaraBugClient {
    * Credentials and headers for an ingest request. Authorization is sent only
    * when there is a login key, because `Bearer undefined` is worse than no
    * header, and caller-supplied headers win over both credentials.
+   *
+   * The SDK header is computed per request rather than once, so a framework
+   * named after init still shows up, on a report the retry buffer sends later
+   * too. These requests already carry a JSON content type and a custom key
+   * header, so a cross-origin one is preflighted with or without it.
    */
   private buildHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      [SDK_HEADER]: sdkHeaderValue(undefined, this.framework),
     };
 
     if (this.options.ingest_key) {

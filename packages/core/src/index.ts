@@ -6,3 +6,5 @@ export { DataFilter, DEFAULT_BLACKLIST, DEFAULT_URL_BLACKLIST, FILTERED } from '
 export type { DataFilterOptions } from './data-filter';
 export { RateLimiter } from './rate-limiter';
 export type { RateLimiterOptions, RetryDecision } from './rate-limiter';
+export { SDK_HEADER, SDK_VERSION, sdkHeaderValue, sdkRuntime, sdkToken } from './sdk';
+export type { SdkRuntime } from './sdk';

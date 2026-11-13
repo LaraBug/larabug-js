@@ -29,3 +29,4 @@ export type {
   UploadResult,
   UploadReport,
 } from './upload';
+export { SDK_HEADER, SDK_VERSION, SOURCEMAPS_VERSION, sdkHeaderValue } from './sdk';

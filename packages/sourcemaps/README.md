@@ -100,7 +100,7 @@ if (!report.ok) {
 
 ## What gets sent
 
-Every map is a `POST /api/sourcemaps` with multipart fields `release`, `minified_url`, `sourcemap` and, when you pass one, `dist`. It authenticates the way the browser SDK does. An ingest key goes in the `X-LaraBug-Ingest-Key` header. A legacy DSN sends its login key as a bearer token and names its project in a `project` field.
+Every map is a `POST /api/sourcemaps` with multipart fields `release`, `minified_url`, `sourcemap` and, when you pass one, `dist`. It authenticates the way the browser SDK does. An ingest key goes in the `X-LaraBug-Ingest-Key` header. A legacy DSN sends its login key as a bearer token and names its project in a `project` field. Every request also names the SDK in an `X-LaraBug-Sdk` header, such as `larabug-js/0.4.2 node sourcemaps/0.1.1` (or `vite-plugin/0.2.1` in place of the last token when `@larabug/vite` uploads).
 
 Network errors, 408, 429 and 5xx responses are retried with exponential backoff, and a `Retry-After` header is honoured up to 30 seconds. A 413 or 422 is reported without a retry. A 401 or 403 stops the remaining uploads.
 

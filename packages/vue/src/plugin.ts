@@ -58,6 +58,7 @@ export const LaraBugVuePlugin: Plugin = {
     
     // Ensure framework tag is set
     client.setTag('framework', 'vue');
+    client.setFramework('vue', app.version);
 
     // Store client on app
     app.config.globalProperties.$larabug = client;

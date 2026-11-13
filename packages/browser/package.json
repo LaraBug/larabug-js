@@ -1,6 +1,6 @@
 {
   "name": "@larabug/browser",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "LaraBug SDK for browsers with automatic error tracking",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
@@ -27,7 +27,7 @@
   "author": "LaraBug",
   "license": "MIT",
   "dependencies": {
-    "@larabug/core": "^0.4.1"
+    "@larabug/core": "^0.4.2"
   },
   "devDependencies": {
     "@rollup/plugin-typescript": "^11.1.6",

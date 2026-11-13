@@ -137,6 +137,10 @@ That README shows how to inject the release with webpack's `DefinePlugin`.
 
 After each `vite build`, `@larabug/vite` also sends your `package-lock.json`, `pnpm-lock.yaml` or `yarn.lock` to LaraBug, which checks the packages in it against known vulnerabilities. Laravel apps get the same from the PHP SDK for `composer.lock`; this covers apps without it. Turn it off with `larabug({ cveScan: false })`.
 
+## The SDK version header
+
+Every request to LaraBug names the SDK that sent it in an `X-LaraBug-Sdk` header, so LaraBug can tell which SDK versions your projects run. It holds space separated product tokens: the SDK and its version, where it runs, and the framework or tool, for example `larabug-js/0.4.2 browser vue/3.5.13`, `larabug-js/0.4.2 browser inertia` or `larabug-js/0.4.2 node sourcemaps/0.1.1`. The framework packages add their token when they set up the client. Inertia exposes no version at runtime, so its token has none. The header has been sent since `@larabug/core` 0.4.2, `@larabug/browser` 0.3.2, `@larabug/vue`, `@larabug/react` and `@larabug/inertia` 0.1.5, `@larabug/sourcemaps` 0.1.1 and `@larabug/vite` 0.2.1.
+
 ## Documentation
 
 Full documentation — configuration, framework integrations, data filtering, source maps — lives at **[larabug.com/docs](https://www.larabug.com/docs)**.

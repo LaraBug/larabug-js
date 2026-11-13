@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import { basename } from 'path';
 import { authHeaders, Credentials, resolveHost } from './credentials';
+import { SDK_HEADER, sdkHeaderValue } from './sdk';
 
 export interface Logger {
   info(message: string): void;
@@ -32,6 +33,11 @@ export interface UploadOptions {
   /** Report what would be uploaded without sending anything. */
   dryRun?: boolean;
   logger?: Logger;
+  /**
+   * The tool uploading, as the last token of the `X-LaraBug-Sdk` header.
+   * Defaults to `sourcemaps/<version>`.
+   */
+  client?: string;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -168,6 +174,7 @@ async function uploadOne(
         headers: {
           Accept: 'application/json',
           'User-Agent': 'larabug-sourcemaps',
+          [SDK_HEADER]: sdkHeaderValue(options.client),
           ...authHeaders(options.credentials),
         },
         body: formFor(file, content, options),
@@ -292,7 +299,13 @@ function describe(error: unknown): string {
 /** `GET /api/sourcemaps/releases/{release}`: what LaraBug holds for a release. */
 export async function listSourceMaps(
   release: string,
-  options: { credentials: Credentials; host?: string; fetch?: typeof fetch; timeout?: number }
+  options: {
+    credentials: Credentials;
+    host?: string;
+    fetch?: typeof fetch;
+    timeout?: number;
+    client?: string;
+  }
 ): Promise<unknown> {
   const send = options.fetch ?? globalThis.fetch;
   const url = `${sourcemapsEndpoint(options.credentials, options.host)}/releases/${encodeURIComponent(release)}`;
@@ -304,6 +317,7 @@ export async function listSourceMaps(
     headers: {
       Accept: 'application/json',
       'User-Agent': 'larabug-sourcemaps',
+      [SDK_HEADER]: sdkHeaderValue(options.client),
       ...authHeaders(options.credentials),
     },
     signal: AbortSignal.timeout(options.timeout ?? 30000),
