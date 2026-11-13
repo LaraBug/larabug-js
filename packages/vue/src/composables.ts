@@ -1,4 +1,4 @@
-import { inject, onMounted, onUnmounted, watch, Ref } from 'vue';
+import { inject, isRef, onMounted, onUnmounted, watch, Ref } from 'vue';
 import { BrowserClient } from '@larabug/browser';
 import { User } from '@larabug/core';
 
@@ -32,7 +32,7 @@ export function useLaraBug(): BrowserClient {
 export function useLaraBugUser(user: User | Ref<User | null>): void {
   const client = useLaraBug();
   
-  if ('value' in user) {
+  if (isRef(user)) {
     // Reactive ref
     watch(user, (newUser) => {
       client.setUser(newUser);
@@ -70,7 +70,7 @@ export function useLaraBugUser(user: User | Ref<User | null>): void {
 export function useLaraBugContext(key: string, value: any | Ref<any>): void {
   const client = useLaraBug();
   
-  if ('value' in value) {
+  if (isRef(value)) {
     // Reactive ref
     watch(value, (newValue) => {
       client.setContext(key, newValue);
@@ -100,7 +100,7 @@ export function useLaraBugContext(key: string, value: any | Ref<any>): void {
 export function useLaraBugTag(key: string, value: string | Ref<string>): void {
   const client = useLaraBug();
   
-  if ('value' in value) {
+  if (isRef(value)) {
     // Reactive ref
     watch(value, (newValue) => {
       client.setTag(key, newValue);
