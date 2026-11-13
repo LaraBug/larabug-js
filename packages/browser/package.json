@@ -1,6 +1,6 @@
 {
   "name": "@larabug/browser",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "LaraBug SDK for browsers with automatic error tracking",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
@@ -15,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/LaraBug/larabug-js",
+    "url": "git+https://github.com/LaraBug/larabug-js",
     "directory": "packages/browser"
   },
   "keywords": [
@@ -27,7 +27,7 @@
   "author": "LaraBug",
   "license": "MIT",
   "dependencies": {
-    "@larabug/core": "^0.4.0"
+    "@larabug/core": "^0.4.1"
   },
   "devDependencies": {
     "@rollup/plugin-typescript": "^11.1.6",

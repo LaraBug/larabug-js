@@ -1,6 +1,6 @@
 {
   "name": "@larabug/react",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "LaraBug SDK for React with Error Boundary component",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
@@ -15,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/LaraBug/larabug-js",
+    "url": "git+https://github.com/LaraBug/larabug-js",
     "directory": "packages/react"
   },
   "keywords": [
@@ -30,8 +30,8 @@
     "react": ">=16.8.0"
   },
   "dependencies": {
-    "@larabug/browser": "^0.3.0",
-    "@larabug/core": "^0.4.0"
+    "@larabug/browser": "^0.3.1",
+    "@larabug/core": "^0.4.1"
   },
   "devDependencies": {
     "@rollup/plugin-typescript": "^11.1.6",
